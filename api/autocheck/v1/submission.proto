@@ -1,0 +1,195 @@
+syntax = "proto3";
+
+package autocheck.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/api/field_behavior.proto";
+import "google/protobuf/timestamp.proto";
+
+// SubmissionService — посылки: отправка решений и их результаты.
+service SubmissionService {
+  // CreateSubmission отправляет решение на проверку. Задание должно быть опубликовано
+  // (автор может отправлять решения к своему черновику), язык — разрешён в задании.
+  // Повтор запроса с тем же client_request_id возвращает уже созданную посылку.
+  rpc CreateSubmission(CreateSubmissionRequest) returns (CreateSubmissionResponse) {
+    option (google.api.http) = {
+      post: "/v1/problems/{problem_id}/submissions"
+      body: "*"
+    };
+  }
+
+  // GetSubmission возвращает посылку с результатами по тестам. Доступно автору посылки,
+  // автору задания и администратору.
+  rpc GetSubmission(GetSubmissionRequest) returns (GetSubmissionResponse) {
+    option (google.api.http) = {get: "/v1/submissions/{id}"};
+  }
+
+  // ListSubmissions возвращает посылки, новые первыми. Без problem_id — свои посылки.
+  // С problem_id автор задания и администратор видят посылки всех пользователей.
+  rpc ListSubmissions(ListSubmissionsRequest) returns (ListSubmissionsResponse) {
+    option (google.api.http) = {get: "/v1/submissions"};
+  }
+
+  // GetSubmissionSource возвращает исходный код посылки.
+  rpc GetSubmissionSource(GetSubmissionSourceRequest) returns (GetSubmissionSourceResponse) {
+    option (google.api.http) = {get: "/v1/submissions/{id}/source"};
+  }
+}
+
+// SubmissionStatus — этап проверки посылки.
+enum SubmissionStatus {
+  SUBMISSION_STATUS_UNSPECIFIED = 0;
+  // В очереди на проверку.
+  SUBMISSION_STATUS_QUEUED = 1;
+  // Компилируется.
+  SUBMISSION_STATUS_COMPILING = 2;
+  // Выполняются тесты.
+  SUBMISSION_STATUS_RUNNING = 3;
+  // Проверка завершена, вердикт известен.
+  SUBMISSION_STATUS_DONE = 4;
+  // Сбой проверяющей системы (вердикт SE), посылку можно перепроверить.
+  SUBMISSION_STATUS_FAILED = 5;
+}
+
+// Verdict — результат проверки посылки или одного теста.
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  // Принято.
+  VERDICT_OK = 1;
+  // Ошибка компиляции.
+  VERDICT_COMPILATION_ERROR = 2;
+  // Неверный ответ.
+  VERDICT_WRONG_ANSWER = 3;
+  // Превышено ограничение времени.
+  VERDICT_TIME_LIMIT_EXCEEDED = 4;
+  // Превышено ограничение памяти.
+  VERDICT_MEMORY_LIMIT_EXCEEDED = 5;
+  // Ошибка выполнения (ненулевой код возврата, падение).
+  VERDICT_RUNTIME_ERROR = 6;
+  // Сбой проверяющей системы, не вина решения.
+  VERDICT_SYSTEM_ERROR = 7;
+}
+
+// Submission — посылка.
+message Submission {
+  // Идентификатор (UUID).
+  string id = 1;
+  // Задание (UUID).
+  string problem_id = 2;
+  // Автор посылки (UUID).
+  string user_id = 3;
+  // Язык решения.
+  string language_id = 4;
+  // Размер исходного кода, байты.
+  int32 source_size_bytes = 5;
+  // Этап проверки.
+  SubmissionStatus status = 6;
+  // Итоговый вердикт; VERDICT_UNSPECIFIED, пока проверка не завершена.
+  Verdict verdict = 7;
+  // Набранные баллы; пусто, пока проверка не завершена.
+  optional int32 score = 8;
+  // Максимальное время на одном тесте, миллисекунды.
+  optional int32 max_time_ms = 9;
+  // Максимальная память на одном тесте, килобайты.
+  optional int32 max_memory_kb = 10;
+  // Вывод компилятора при ошибке компиляции.
+  string compile_log = 11;
+  // Время отправки.
+  google.protobuf.Timestamp create_time = 12;
+  // Начало проверки.
+  google.protobuf.Timestamp start_time = 13;
+  // Конец проверки.
+  google.protobuf.Timestamp finish_time = 14;
+}
+
+// TestRun — результат посылки на одном тесте.
+message TestRun {
+  // Тест (UUID).
+  string test_case_id = 1;
+  // Порядковый номер теста в задании.
+  int32 ordinal = 2;
+  // Открытый ли тест.
+  bool is_sample = 3;
+  // Вердикт на тесте.
+  Verdict verdict = 4;
+  // Время работы, миллисекунды.
+  int32 time_ms = 5;
+  // Пиковая память, килобайты.
+  int32 memory_kb = 6;
+}
+
+// CreateSubmissionRequest — отправка решения.
+message CreateSubmissionRequest {
+  // Задание (UUID).
+  string problem_id = 1 [(buf.validate.field).string.uuid = true];
+  // Язык решения, одно из language_ids задания.
+  string language_id = 2 [(buf.validate.field).string.min_len = 1];
+  // Исходный код, UTF-8, не больше 64 КБ.
+  string source = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 65536
+  }];
+  // Ключ идемпотентности (UUID): повтор запроса с тем же ключом не создаёт новую посылку.
+  string client_request_id = 4 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+// CreateSubmissionResponse — созданная посылка.
+message CreateSubmissionResponse {
+  Submission submission = 1;
+}
+
+// GetSubmissionRequest — запрос посылки.
+message GetSubmissionRequest {
+  // Посылка (UUID).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetSubmissionResponse — посылка и результаты по тестам.
+message GetSubmissionResponse {
+  Submission submission = 1;
+  // Результаты по тестам в порядке тестов. Пусто, пока тесты не запускались.
+  repeated TestRun test_runs = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// ListSubmissionsRequest — запрос списка посылок.
+message ListSubmissionsRequest {
+  // Только посылки по этому заданию (UUID).
+  string problem_id = 1 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // Размер страницы, по умолчанию 20, не больше 100.
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  // Токен страницы из next_page_token предыдущего ответа.
+  string page_token = 3;
+}
+
+// ListSubmissionsResponse — страница посылок.
+message ListSubmissionsResponse {
+  repeated Submission submissions = 1;
+  // Токен следующей страницы; пустой, если это последняя страница.
+  string next_page_token = 2;
+}
+
+// GetSubmissionSourceRequest — запрос исходного кода посылки.
+message GetSubmissionSourceRequest {
+  // Посылка (UUID).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetSubmissionSourceResponse — исходный код посылки.
+message GetSubmissionSourceResponse {
+  // Язык решения.
+  string language_id = 1;
+  // Имя файла с исходником в песочнице, например "main.go".
+  string file_name = 2;
+  // Исходный код.
+  string source = 3;
+}

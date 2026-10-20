@@ -37,8 +37,9 @@ type Config struct {
 
 // Services — реализации gRPC-сервисов.
 type Services struct {
-	User    v1.UserServiceServer
-	Problem v1.ProblemServiceServer
+	User       v1.UserServiceServer
+	Problem    v1.ProblemServiceServer
+	Submission v1.SubmissionServiceServer
 }
 
 // Server — gRPC-сервер и HTTP-шлюз.
@@ -73,6 +74,7 @@ func New(
 	)
 	v1.RegisterUserServiceServer(g, svc.User)
 	v1.RegisterProblemServiceServer(g, svc.Problem)
+	v1.RegisterSubmissionServiceServer(g, svc.Submission)
 
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(g, hs)
@@ -109,6 +111,7 @@ func (s *Server) Run(ctx context.Context) error {
 	for _, register := range []func(context.Context, *runtime.ServeMux, *grpc.ClientConn) error{
 		v1.RegisterUserServiceHandler,
 		v1.RegisterProblemServiceHandler,
+		v1.RegisterSubmissionServiceHandler,
 	} {
 		if err := register(ctx, gw, conn); err != nil {
 			return fmt.Errorf("register gateway: %w", err)

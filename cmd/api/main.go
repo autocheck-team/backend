@@ -16,6 +16,7 @@ import (
 	"github.com/autocheck-team/backend/internal/problem"
 	"github.com/autocheck-team/backend/internal/server"
 	"github.com/autocheck-team/backend/internal/storage"
+	"github.com/autocheck-team/backend/internal/submission"
 	"github.com/autocheck-team/backend/internal/user"
 )
 
@@ -71,8 +72,9 @@ func run(log *slog.Logger) error {
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
 		ShutdownTimeout:    cfg.ShutdownTimeout,
 	}, log, pool, authn, validator, server.Services{
-		User:    user.NewService(),
-		Problem: problem.NewService(problem.NewRepository(pool), objects, validator),
+		User:       user.NewService(),
+		Problem:    problem.NewService(problem.NewRepository(pool), objects, validator),
+		Submission: submission.NewService(submission.NewRepository(pool), objects),
 	})
 	return srv.Run(ctx)
 }

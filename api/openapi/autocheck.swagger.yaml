@@ -8,6 +8,8 @@ tags:
     description: UserService — профиль текущего пользователя.
   - name: ProblemService
     description: ProblemService — задания, тест-кейсы и языки программирования.
+  - name: SubmissionService
+    description: 'SubmissionService — посылки: отправка решений и их результаты.'
 consumes:
   - application/json
 produces:
@@ -236,6 +238,35 @@ paths:
               в запросе заполнены только изменяемые поля.
       tags:
         - ProblemService
+  /v1/problems/{problemId}/submissions:
+    post:
+      summary: |-
+        CreateSubmission отправляет решение на проверку. Задание должно быть опубликовано
+        (автор может отправлять решения к своему черновику), язык — разрешён в задании.
+        Повтор запроса с тем же client_request_id возвращает уже созданную посылку.
+      operationId: SubmissionService_CreateSubmission
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateSubmissionResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: Задание (UUID).
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/SubmissionServiceCreateSubmissionBody'
+      tags:
+        - SubmissionService
   /v1/problems/{problemId}/test-cases:
     get:
       summary: |-
@@ -344,6 +375,84 @@ paths:
             $ref: '#/definitions/ProblemServiceConfirmTestCaseBody'
       tags:
         - ProblemService
+  /v1/submissions:
+    get:
+      summary: |-
+        ListSubmissions возвращает посылки, новые первыми. Без problem_id — свои посылки.
+        С problem_id автор задания и администратор видят посылки всех пользователей.
+      operationId: SubmissionService_ListSubmissions
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListSubmissionsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: Только посылки по этому заданию (UUID).
+          in: query
+          required: false
+          type: string
+        - name: pageSize
+          description: Размер страницы, по умолчанию 20, не больше 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Токен страницы из next_page_token предыдущего ответа.
+          in: query
+          required: false
+          type: string
+      tags:
+        - SubmissionService
+  /v1/submissions/{id}:
+    get:
+      summary: |-
+        GetSubmission возвращает посылку с результатами по тестам. Доступно автору посылки,
+        автору задания и администратору.
+      operationId: SubmissionService_GetSubmission
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetSubmissionResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Посылка (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - SubmissionService
+  /v1/submissions/{id}/source:
+    get:
+      summary: GetSubmissionSource возвращает исходный код посылки.
+      operationId: SubmissionService_GetSubmissionSource
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetSubmissionSourceResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Посылка (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - SubmissionService
 definitions:
   ProblemServiceConfirmTestCaseBody:
     type: object
@@ -359,6 +468,19 @@ definitions:
         format: int32
         description: Баллы за тест, по умолчанию 1.
     description: CreateTestCaseRequest — создание теста.
+  SubmissionServiceCreateSubmissionBody:
+    type: object
+    properties:
+      languageId:
+        type: string
+        description: Язык решения, одно из language_ids задания.
+      source:
+        type: string
+        description: Исходный код, UTF-8, не больше 64 КБ.
+      clientRequestId:
+        type: string
+        description: 'Ключ идемпотентности (UUID): повтор запроса с тем же ключом не создаёт новую посылку.'
+    description: CreateSubmissionRequest — отправка решения.
   protobufAny:
     type: object
     properties:
@@ -406,6 +528,12 @@ definitions:
       problem:
         $ref: '#/definitions/v1Problem'
     description: CreateProblemResponse — созданное задание.
+  v1CreateSubmissionResponse:
+    type: object
+    properties:
+      submission:
+        $ref: '#/definitions/v1Submission'
+    description: CreateSubmissionResponse — созданная посылка.
   v1CreateTestCaseResponse:
     type: object
     properties:
@@ -440,6 +568,32 @@ definitions:
       problem:
         $ref: '#/definitions/v1Problem'
     description: GetProblemResponse — задание.
+  v1GetSubmissionResponse:
+    type: object
+    properties:
+      submission:
+        $ref: '#/definitions/v1Submission'
+      testRuns:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1TestRun'
+        description: Результаты по тестам в порядке тестов. Пусто, пока тесты не запускались.
+        readOnly: true
+    description: GetSubmissionResponse — посылка и результаты по тестам.
+  v1GetSubmissionSourceResponse:
+    type: object
+    properties:
+      languageId:
+        type: string
+        description: Язык решения.
+      fileName:
+        type: string
+        description: Имя файла с исходником в песочнице, например "main.go".
+      source:
+        type: string
+        description: Исходный код.
+    description: GetSubmissionSourceResponse — исходный код посылки.
   v1Language:
     type: object
     properties:
@@ -471,6 +625,18 @@ definitions:
         type: string
         description: Токен следующей страницы; пустой, если это последняя страница.
     description: ListProblemsResponse — страница заданий.
+  v1ListSubmissionsResponse:
+    type: object
+    properties:
+      submissions:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1Submission'
+      nextPageToken:
+        type: string
+        description: Токен следующей страницы; пустой, если это последняя страница.
+    description: ListSubmissionsResponse — страница посылок.
   v1ListTestCasesResponse:
     type: object
     properties:
@@ -556,6 +722,77 @@ definitions:
        - ROLE_STUDENT: Студент: решает задания и отправляет посылки.
        - ROLE_AUTHOR: Автор заданий: создаёт задания и тесты.
        - ROLE_ADMIN: Администратор платформы.
+  v1Submission:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор (UUID).
+      problemId:
+        type: string
+        description: Задание (UUID).
+      userId:
+        type: string
+        description: Автор посылки (UUID).
+      languageId:
+        type: string
+        description: Язык решения.
+      sourceSizeBytes:
+        type: integer
+        format: int32
+        description: Размер исходного кода, байты.
+      status:
+        $ref: '#/definitions/v1SubmissionStatus'
+        description: Этап проверки.
+      verdict:
+        $ref: '#/definitions/v1Verdict'
+        description: Итоговый вердикт; VERDICT_UNSPECIFIED, пока проверка не завершена.
+      score:
+        type: integer
+        format: int32
+        description: Набранные баллы; пусто, пока проверка не завершена.
+      maxTimeMs:
+        type: integer
+        format: int32
+        description: Максимальное время на одном тесте, миллисекунды.
+      maxMemoryKb:
+        type: integer
+        format: int32
+        description: Максимальная память на одном тесте, килобайты.
+      compileLog:
+        type: string
+        description: Вывод компилятора при ошибке компиляции.
+      createTime:
+        type: string
+        format: date-time
+        description: Время отправки.
+      startTime:
+        type: string
+        format: date-time
+        description: Начало проверки.
+      finishTime:
+        type: string
+        format: date-time
+        description: Конец проверки.
+    description: Submission — посылка.
+  v1SubmissionStatus:
+    type: string
+    enum:
+      - SUBMISSION_STATUS_UNSPECIFIED
+      - SUBMISSION_STATUS_QUEUED
+      - SUBMISSION_STATUS_COMPILING
+      - SUBMISSION_STATUS_RUNNING
+      - SUBMISSION_STATUS_DONE
+      - SUBMISSION_STATUS_FAILED
+    default: SUBMISSION_STATUS_UNSPECIFIED
+    description: |-
+      SubmissionStatus — этап проверки посылки.
+
+       - SUBMISSION_STATUS_QUEUED: В очереди на проверку.
+       - SUBMISSION_STATUS_COMPILING: Компилируется.
+       - SUBMISSION_STATUS_RUNNING: Выполняются тесты.
+       - SUBMISSION_STATUS_DONE: Проверка завершена, вердикт известен.
+       - SUBMISSION_STATUS_FAILED: Сбой проверяющей системы (вердикт SE), посылку можно перепроверить.
   v1TestCase:
     type: object
     properties:
@@ -594,6 +831,31 @@ definitions:
         type: string
         description: Временная ссылка на скачивание эталонного вывода. Пустая, если тест не загружен.
     description: TestCase — тест задания.
+  v1TestRun:
+    type: object
+    properties:
+      testCaseId:
+        type: string
+        description: Тест (UUID).
+      ordinal:
+        type: integer
+        format: int32
+        description: Порядковый номер теста в задании.
+      isSample:
+        type: boolean
+        description: Открытый ли тест.
+      verdict:
+        $ref: '#/definitions/v1Verdict'
+        description: Вердикт на тесте.
+      timeMs:
+        type: integer
+        format: int32
+        description: Время работы, миллисекунды.
+      memoryKb:
+        type: integer
+        format: int32
+        description: Пиковая память, килобайты.
+    description: TestRun — результат посылки на одном тесте.
   v1UpdateProblemResponse:
     type: object
     properties:
@@ -618,6 +880,28 @@ definitions:
           $ref: '#/definitions/v1Role'
         description: Все роли пользователя.
     description: User — профиль пользователя.
+  v1Verdict:
+    type: string
+    enum:
+      - VERDICT_UNSPECIFIED
+      - VERDICT_OK
+      - VERDICT_COMPILATION_ERROR
+      - VERDICT_WRONG_ANSWER
+      - VERDICT_TIME_LIMIT_EXCEEDED
+      - VERDICT_MEMORY_LIMIT_EXCEEDED
+      - VERDICT_RUNTIME_ERROR
+      - VERDICT_SYSTEM_ERROR
+    default: VERDICT_UNSPECIFIED
+    description: |-
+      Verdict — результат проверки посылки или одного теста.
+
+       - VERDICT_OK: Принято.
+       - VERDICT_COMPILATION_ERROR: Ошибка компиляции.
+       - VERDICT_WRONG_ANSWER: Неверный ответ.
+       - VERDICT_TIME_LIMIT_EXCEEDED: Превышено ограничение времени.
+       - VERDICT_MEMORY_LIMIT_EXCEEDED: Превышено ограничение памяти.
+       - VERDICT_RUNTIME_ERROR: Ошибка выполнения (ненулевой код возврата, падение).
+       - VERDICT_SYSTEM_ERROR: Сбой проверяющей системы, не вина решения.
 securityDefinitions:
   bearer:
     type: apiKey
