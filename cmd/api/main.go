@@ -1,19 +1,18 @@
-// Команда api — HTTP-сервер для фронтенда.
+// Команда api — gRPC-сервер и REST-шлюз (grpc-gateway) для фронтенда.
 package main
 
 import (
 	"context"
-	"errors"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	"github.com/autocheck-team/backend/internal/auth"
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
-	"github.com/autocheck-team/backend/internal/httpapi"
+	"github.com/autocheck-team/backend/internal/server"
+	"github.com/autocheck-team/backend/internal/user"
 )
 
 func main() {
@@ -29,6 +28,9 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	if err := cfg.RequireAPI(); err != nil {
+		return err
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -39,28 +41,21 @@ func run(log *slog.Logger) error {
 	}
 	defer pool.Close()
 
-	srv := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewHandler(log, pool),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	// Ключи Keycloak подгружаются в фоне на всё время жизни процесса.
+	verifier := auth.NewVerifier(context.Background(), cfg.OIDCIssuer, cfg.OIDCJWKSURL, cfg.OIDCAudience)
+	syncer := user.NewSyncer(pool)
+	authn := auth.NewInterceptors(verifier, syncer.Sync, server.PublicMethods...)
 
-	errc := make(chan error, 1)
-	go func() {
-		log.Info("listening", "addr", cfg.HTTPAddr)
-		errc <- srv.ListenAndServe()
-	}()
-
-	select {
-	case err := <-errc:
-		return err
-	case <-ctx.Done():
-	}
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	srv, err := server.New(server.Config{
+		GRPCAddr:           cfg.GRPCAddr,
+		HTTPAddr:           cfg.HTTPAddr,
+		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
+		ShutdownTimeout:    cfg.ShutdownTimeout,
+	}, log, pool, authn, server.Services{
+		User: user.NewService(),
+	})
+	if err != nil {
 		return err
 	}
-	return nil
+	return srv.Run(ctx)
 }

@@ -48,8 +48,8 @@ func seed(t *testing.T, tx pgx.Tx) string {
 	t.Helper()
 	ctx := context.Background()
 	var userID, problemID, submissionID string
-	err := tx.QueryRow(ctx, `INSERT INTO users (email, password_hash, display_name, role)
-		VALUES ('Author@Example.com', 'x', 'Author', 'author') RETURNING id`).Scan(&userID)
+	err := tx.QueryRow(ctx, `INSERT INTO users (id, email, display_name, role)
+		VALUES (gen_random_uuid(), 'Author@Example.com', 'Author', 'author') RETURNING id`).Scan(&userID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,8 +69,8 @@ func seed(t *testing.T, tx pgx.Tx) string {
 func TestEmailUniqueIgnoresCase(t *testing.T) {
 	_, tx := setup(t)
 	seed(t, tx)
-	_, err := tx.Exec(context.Background(), `INSERT INTO users (email, password_hash, display_name)
-		VALUES ('author@example.COM', 'x', 'Dup')`)
+	_, err := tx.Exec(context.Background(), `INSERT INTO users (id, email, display_name)
+		VALUES (gen_random_uuid(), 'author@example.COM', 'Dup')`)
 	if got := pgCode(err); got != "23505" {
 		t.Fatalf("want unique_violation 23505, got %q (%v)", got, err)
 	}
