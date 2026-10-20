@@ -19,7 +19,8 @@ pkg/api            сгенерированный Go-код (protobuf, gRPC, gat
 cmd/api            gRPC :9090 + REST-шлюз :8080
 cmd/worker         воркер проверки посылок
 cmd/migrate        миграции БД (up / down)
-internal/          auth (Keycloak JWT), server, user, config, db (+ migrations)
+internal/          auth (Keycloak JWT), server, user, problem, submission,
+                   storage (S3), sandbox (Docker), config, db (+ migrations)
 ```
 
 ## API и авторизация
