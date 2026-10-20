@@ -1,0 +1,324 @@
+syntax = "proto3";
+
+package autocheck.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/api/field_behavior.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+// ProblemService — задания, тест-кейсы и языки программирования.
+service ProblemService {
+  // ListLanguages возвращает доступные языки программирования.
+  rpc ListLanguages(ListLanguagesRequest) returns (ListLanguagesResponse) {
+    option (google.api.http) = {get: "/v1/languages"};
+  }
+
+  // CreateProblem создаёт задание. Доступно авторам и администраторам.
+  // Новое задание не опубликовано.
+  rpc CreateProblem(CreateProblemRequest) returns (CreateProblemResponse) {
+    option (google.api.http) = {
+      post: "/v1/problems"
+      body: "problem"
+    };
+  }
+
+  // GetProblem возвращает задание. Неопубликованное видят только автор и администратор.
+  rpc GetProblem(GetProblemRequest) returns (GetProblemResponse) {
+    option (google.api.http) = {get: "/v1/problems/{id}"};
+  }
+
+  // ListProblems возвращает задания, новые первыми. Студенты видят опубликованные,
+  // авторы — опубликованные и свои, администраторы — все.
+  rpc ListProblems(ListProblemsRequest) returns (ListProblemsResponse) {
+    option (google.api.http) = {get: "/v1/problems"};
+  }
+
+  // UpdateProblem меняет поля из update_mask. Доступно автору задания и администратору.
+  // Опубликовать можно только задание хотя бы с одним загруженным тестом.
+  rpc UpdateProblem(UpdateProblemRequest) returns (UpdateProblemResponse) {
+    option (google.api.http) = {
+      patch: "/v1/problems/{problem.id}"
+      body: "problem"
+    };
+  }
+
+  // DeleteProblem удаляет задание вместе с тестами. Нельзя удалить задание,
+  // по которому уже есть посылки: его можно снять с публикации.
+  rpc DeleteProblem(DeleteProblemRequest) returns (DeleteProblemResponse) {
+    option (google.api.http) = {delete: "/v1/problems/{id}"};
+  }
+
+  // CreateTestCase создаёт тест и возвращает ссылки для загрузки входных и эталонных
+  // данных напрямую в объектное хранилище (HTTP PUT). После загрузки нужно вызвать
+  // ConfirmTestCase. Доступно автору задания и администратору.
+  rpc CreateTestCase(CreateTestCaseRequest) returns (CreateTestCaseResponse) {
+    option (google.api.http) = {
+      post: "/v1/problems/{problem_id}/test-cases"
+      body: "*"
+    };
+  }
+
+  // ConfirmTestCase проверяет, что оба файла загружены, и включает тест в проверку.
+  rpc ConfirmTestCase(ConfirmTestCaseRequest) returns (ConfirmTestCaseResponse) {
+    option (google.api.http) = {
+      post: "/v1/problems/{problem_id}/test-cases/{id}:confirm"
+      body: "*"
+    };
+  }
+
+  // ListTestCases возвращает тесты задания со ссылками на скачивание. Автор и
+  // администратор видят все тесты, остальные — только открытые тесты опубликованного задания.
+  rpc ListTestCases(ListTestCasesRequest) returns (ListTestCasesResponse) {
+    option (google.api.http) = {get: "/v1/problems/{problem_id}/test-cases"};
+  }
+
+  // DeleteTestCase удаляет тест. Доступно автору задания и администратору.
+  rpc DeleteTestCase(DeleteTestCaseRequest) returns (DeleteTestCaseResponse) {
+    option (google.api.http) = {delete: "/v1/problems/{problem_id}/test-cases/{id}"};
+  }
+}
+
+// Language — язык программирования и его тулчейн.
+message Language {
+  // Идентификатор, например "go1.27", "cpp20-gcc15".
+  string id = 1;
+  // Название для интерфейса, например "Go 1.27".
+  string name = 2;
+}
+
+// Checker — способ сравнения вывода решения с эталоном.
+enum Checker {
+  CHECKER_UNSPECIFIED = 0;
+  // Побайтовое совпадение.
+  CHECKER_EXACT = 1;
+  // Совпадение последовательности токенов, разделённых пробельными символами.
+  CHECKER_TOKENS = 2;
+  // Как TOKENS, но числа сравниваются с погрешностью float_epsilon.
+  CHECKER_FLOAT = 3;
+  // Собственная программа-чекер автора задания. Пока не поддерживается.
+  CHECKER_CUSTOM = 4;
+}
+
+// Problem — задание.
+message Problem {
+  option (buf.validate.message).cel = {
+    id: "float_epsilon_required"
+    message: "для CHECKER_FLOAT нужна погрешность float_epsilon"
+    expression: "this.checker != 3 || has(this.float_epsilon)"
+  };
+
+  // Идентификатор (UUID).
+  string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // Автор задания (UUID пользователя).
+  string author_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // Короткий адрес для URL: строчные латинские буквы, цифры и дефисы.
+  string slug = 3 [(buf.validate.field).string = {
+    min_len: 3
+    max_len: 64
+    pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+  }];
+  // Название.
+  string title = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  // Условие в Markdown.
+  string statement = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100000
+  }];
+  // Ограничение времени на один тест, миллисекунды.
+  int32 time_limit_ms = 6 [(buf.validate.field).int32 = {
+    gte: 100
+    lte: 30000
+  }];
+  // Ограничение памяти, килобайты (от 4 МБ до 2 ГБ).
+  int32 memory_limit_kb = 7 [(buf.validate.field).int32 = {
+    gte: 4096
+    lte: 2097152
+  }];
+  // Способ проверки вывода.
+  Checker checker = 8 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Допустимая погрешность для CHECKER_FLOAT.
+  optional double float_epsilon = 9 [(buf.validate.field).double = {
+    gt: 0
+    lt: 1
+  }];
+  // Языки, на которых можно сдавать решение.
+  repeated string language_ids = 10 [(buf.validate.field).repeated = {
+    min_items: 1
+    unique: true
+  }];
+  // Разрешены ли ИИ-подсказки к заданию.
+  bool allow_ai_hints = 11;
+  // Опубликовано ли задание (видно студентам).
+  bool is_published = 12;
+  // Число загруженных и подтверждённых тестов.
+  int32 ready_test_count = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // Время создания.
+  google.protobuf.Timestamp create_time = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // Время последнего изменения.
+  google.protobuf.Timestamp update_time = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// TestCase — тест задания.
+message TestCase {
+  // Идентификатор (UUID).
+  string id = 1;
+  // Задание (UUID).
+  string problem_id = 2;
+  // Порядковый номер теста в задании, начиная с 1.
+  int32 ordinal = 3;
+  // Открытый тест: студент видит вход, эталон и diff своего вывода.
+  bool is_sample = 4;
+  // Баллы за прохождение теста.
+  int32 points = 5;
+  // Оба файла загружены и тест участвует в проверке.
+  bool is_ready = 6;
+  // Размер входных данных, байты. 0, пока тест не подтверждён.
+  int64 input_size_bytes = 7;
+  // Размер эталонного вывода, байты. 0, пока тест не подтверждён.
+  int64 expected_size_bytes = 8;
+  // Временная ссылка на скачивание входных данных. Пустая, если тест не загружен.
+  string input_download_url = 9;
+  // Временная ссылка на скачивание эталонного вывода. Пустая, если тест не загружен.
+  string expected_download_url = 10;
+}
+
+// ListLanguagesRequest — запрос языков.
+message ListLanguagesRequest {}
+
+// ListLanguagesResponse — доступные языки.
+message ListLanguagesResponse {
+  repeated Language languages = 1;
+}
+
+// CreateProblemRequest — создание задания.
+message CreateProblemRequest {
+  // Задание. id, author_id, ready_test_count и время игнорируются.
+  Problem problem = 1 [(buf.validate.field).required = true];
+}
+
+// CreateProblemResponse — созданное задание.
+message CreateProblemResponse {
+  Problem problem = 1;
+}
+
+// GetProblemRequest — запрос задания.
+message GetProblemRequest {
+  // Идентификатор задания (UUID).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetProblemResponse — задание.
+message GetProblemResponse {
+  Problem problem = 1;
+}
+
+// ListProblemsRequest — запрос списка заданий.
+message ListProblemsRequest {
+  // Размер страницы, по умолчанию 20, не больше 100.
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  // Токен страницы из next_page_token предыдущего ответа.
+  string page_token = 2;
+  // Только задания текущего пользователя (для авторов).
+  bool only_mine = 3;
+}
+
+// ListProblemsResponse — страница заданий.
+message ListProblemsResponse {
+  repeated Problem problems = 1;
+  // Токен следующей страницы; пустой, если это последняя страница.
+  string next_page_token = 2;
+}
+
+// UpdateProblemRequest — изменение задания.
+message UpdateProblemRequest {
+  // Задание с новыми значениями; id обязателен. Правила Problem проверяются
+  // сервисом для итогового задания после применения update_mask, а не здесь:
+  // в запросе заполнены только изменяемые поля.
+  Problem problem = 1 [(buf.validate.field).ignore = IGNORE_ALWAYS];
+  // Какие поля менять, например "title,time_limit_ms,is_published".
+  google.protobuf.FieldMask update_mask = 2 [(buf.validate.field).required = true];
+}
+
+// UpdateProblemResponse — изменённое задание.
+message UpdateProblemResponse {
+  Problem problem = 1;
+}
+
+// DeleteProblemRequest — удаление задания.
+message DeleteProblemRequest {
+  // Идентификатор задания (UUID).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DeleteProblemResponse — ответ на удаление задания.
+message DeleteProblemResponse {}
+
+// CreateTestCaseRequest — создание теста.
+message CreateTestCaseRequest {
+  // Задание (UUID).
+  string problem_id = 1 [(buf.validate.field).string.uuid = true];
+  // Открытый тест.
+  bool is_sample = 2;
+  // Баллы за тест, по умолчанию 1.
+  optional int32 points = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
+}
+
+// CreateTestCaseResponse — созданный тест и ссылки для загрузки файлов.
+message CreateTestCaseResponse {
+  TestCase test_case = 1;
+  // Ссылка для HTTP PUT входных данных.
+  string input_upload_url = 2;
+  // Ссылка для HTTP PUT эталонного вывода.
+  string expected_upload_url = 3;
+  // До какого момента действуют ссылки.
+  google.protobuf.Timestamp upload_expire_time = 4;
+}
+
+// ConfirmTestCaseRequest — подтверждение загрузки файлов теста.
+message ConfirmTestCaseRequest {
+  // Задание (UUID).
+  string problem_id = 1 [(buf.validate.field).string.uuid = true];
+  // Тест (UUID).
+  string id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// ConfirmTestCaseResponse — подтверждённый тест.
+message ConfirmTestCaseResponse {
+  TestCase test_case = 1;
+}
+
+// ListTestCasesRequest — запрос тестов задания.
+message ListTestCasesRequest {
+  // Задание (UUID).
+  string problem_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ListTestCasesResponse — тесты задания по порядку.
+message ListTestCasesResponse {
+  repeated TestCase test_cases = 1;
+}
+
+// DeleteTestCaseRequest — удаление теста.
+message DeleteTestCaseRequest {
+  // Задание (UUID).
+  string problem_id = 1 [(buf.validate.field).string.uuid = true];
+  // Тест (UUID).
+  string id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// DeleteTestCaseResponse — ответ на удаление теста.
+message DeleteTestCaseResponse {}

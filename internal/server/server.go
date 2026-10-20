@@ -37,7 +37,8 @@ type Config struct {
 
 // Services — реализации gRPC-сервисов.
 type Services struct {
-	User v1.UserServiceServer
+	User    v1.UserServiceServer
+	Problem v1.ProblemServiceServer
 }
 
 // Server — gRPC-сервер и HTTP-шлюз.
@@ -49,11 +50,10 @@ type Server struct {
 }
 
 // New собирает сервер: интерсепторы, сервисы, health и reflection.
-func New(cfg Config, log *slog.Logger, db Pinger, authn *auth.Interceptors, svc Services) (*Server, error) {
-	validator, err := protovalidate.New()
-	if err != nil {
-		return nil, fmt.Errorf("create validator: %w", err)
-	}
+func New(
+	cfg Config, log *slog.Logger, db Pinger, authn *auth.Interceptors,
+	validator protovalidate.Validator, svc Services,
+) *Server {
 	recoveryOpt := recovery.WithRecoveryHandlerContext(func(ctx context.Context, p any) error {
 		log.ErrorContext(ctx, "panic in handler", "panic", p)
 		return status.Error(codes.Internal, "внутренняя ошибка сервера")
@@ -72,12 +72,13 @@ func New(cfg Config, log *slog.Logger, db Pinger, authn *auth.Interceptors, svc 
 		),
 	)
 	v1.RegisterUserServiceServer(g, svc.User)
+	v1.RegisterProblemServiceServer(g, svc.Problem)
 
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(g, hs)
 	reflection.Register(g)
 
-	return &Server{cfg: cfg, log: log, db: db, grpc: g}, nil
+	return &Server{cfg: cfg, log: log, db: db, grpc: g}
 }
 
 // PublicMethods — gRPC-методы, доступные без токена.
@@ -105,8 +106,13 @@ func (s *Server) Run(ctx context.Context) error {
 	defer func() { _ = conn.Close() }()
 
 	gw := runtime.NewServeMux()
-	if err := v1.RegisterUserServiceHandler(ctx, gw, conn); err != nil {
-		return fmt.Errorf("register gateway: %w", err)
+	for _, register := range []func(context.Context, *runtime.ServeMux, *grpc.ClientConn) error{
+		v1.RegisterUserServiceHandler,
+		v1.RegisterProblemServiceHandler,
+	} {
+		if err := register(ctx, gw, conn); err != nil {
+			return fmt.Errorf("register gateway: %w", err)
+		}
 	}
 
 	httpSrv := &http.Server{
