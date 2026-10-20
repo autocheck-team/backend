@@ -6,11 +6,28 @@ info:
 tags:
   - name: UserService
     description: UserService — профиль текущего пользователя.
+  - name: ProblemService
+    description: ProblemService — задания, тест-кейсы и языки программирования.
 consumes:
   - application/json
 produces:
   - application/json
 paths:
+  /v1/languages:
+    get:
+      summary: ListLanguages возвращает доступные языки программирования.
+      operationId: ProblemService_ListLanguages
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListLanguagesResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      tags:
+        - ProblemService
   /v1/me:
     get:
       summary: |-
@@ -28,7 +45,320 @@ paths:
             $ref: '#/definitions/rpcStatus'
       tags:
         - UserService
+  /v1/problems:
+    get:
+      summary: |-
+        ListProblems возвращает задания, новые первыми. Студенты видят опубликованные,
+        авторы — опубликованные и свои, администраторы — все.
+      operationId: ProblemService_ListProblems
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListProblemsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: pageSize
+          description: Размер страницы, по умолчанию 20, не больше 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Токен страницы из next_page_token предыдущего ответа.
+          in: query
+          required: false
+          type: string
+        - name: onlyMine
+          description: Только задания текущего пользователя (для авторов).
+          in: query
+          required: false
+          type: boolean
+      tags:
+        - ProblemService
+    post:
+      summary: |-
+        CreateProblem создаёт задание. Доступно авторам и администраторам.
+        Новое задание не опубликовано.
+      operationId: ProblemService_CreateProblem
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateProblemResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problem
+          description: Задание. id, author_id, ready_test_count и время игнорируются.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1Problem'
+      tags:
+        - ProblemService
+  /v1/problems/{id}:
+    get:
+      summary: GetProblem возвращает задание. Неопубликованное видят только автор и администратор.
+      operationId: ProblemService_GetProblem
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetProblemResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Идентификатор задания (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - ProblemService
+    delete:
+      summary: |-
+        DeleteProblem удаляет задание вместе с тестами. Нельзя удалить задание,
+        по которому уже есть посылки: его можно снять с публикации.
+      operationId: ProblemService_DeleteProblem
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1DeleteProblemResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Идентификатор задания (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - ProblemService
+  /v1/problems/{problem.id}:
+    patch:
+      summary: |-
+        UpdateProblem меняет поля из update_mask. Доступно автору задания и администратору.
+        Опубликовать можно только задание хотя бы с одним загруженным тестом.
+      operationId: ProblemService_UpdateProblem
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1UpdateProblemResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problem.id
+          description: Идентификатор (UUID).
+          in: path
+          required: true
+          type: string
+        - name: problem
+          description: |-
+            Задание с новыми значениями; id обязателен. Правила Problem проверяются
+            сервисом для итогового задания после применения update_mask, а не здесь:
+            в запросе заполнены только изменяемые поля.
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              authorId:
+                type: string
+                description: Автор задания (UUID пользователя).
+                readOnly: true
+              slug:
+                type: string
+                description: 'Короткий адрес для URL: строчные латинские буквы, цифры и дефисы.'
+              title:
+                type: string
+                description: Название.
+              statement:
+                type: string
+                description: Условие в Markdown.
+              timeLimitMs:
+                type: integer
+                format: int32
+                description: Ограничение времени на один тест, миллисекунды.
+              memoryLimitKb:
+                type: integer
+                format: int32
+                description: Ограничение памяти, килобайты (от 4 МБ до 2 ГБ).
+              checker:
+                $ref: '#/definitions/v1Checker'
+                description: Способ проверки вывода.
+              floatEpsilon:
+                type: number
+                format: double
+                description: Допустимая погрешность для CHECKER_FLOAT.
+              languageIds:
+                type: array
+                items:
+                  type: string
+                description: Языки, на которых можно сдавать решение.
+              allowAiHints:
+                type: boolean
+                description: Разрешены ли ИИ-подсказки к заданию.
+              isPublished:
+                type: boolean
+                description: Опубликовано ли задание (видно студентам).
+              readyTestCount:
+                type: integer
+                format: int32
+                description: Число загруженных и подтверждённых тестов.
+                readOnly: true
+              createTime:
+                type: string
+                format: date-time
+                description: Время создания.
+                readOnly: true
+              updateTime:
+                type: string
+                format: date-time
+                description: Время последнего изменения.
+                readOnly: true
+            description: |-
+              Задание с новыми значениями; id обязателен. Правила Problem проверяются
+              сервисом для итогового задания после применения update_mask, а не здесь:
+              в запросе заполнены только изменяемые поля.
+      tags:
+        - ProblemService
+  /v1/problems/{problemId}/test-cases:
+    get:
+      summary: |-
+        ListTestCases возвращает тесты задания со ссылками на скачивание. Автор и
+        администратор видят все тесты, остальные — только открытые тесты опубликованного задания.
+      operationId: ProblemService_ListTestCases
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListTestCasesResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: Задание (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - ProblemService
+    post:
+      summary: |-
+        CreateTestCase создаёт тест и возвращает ссылки для загрузки входных и эталонных
+        данных напрямую в объектное хранилище (HTTP PUT). После загрузки нужно вызвать
+        ConfirmTestCase. Доступно автору задания и администратору.
+      operationId: ProblemService_CreateTestCase
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateTestCaseResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: Задание (UUID).
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/ProblemServiceCreateTestCaseBody'
+      tags:
+        - ProblemService
+  /v1/problems/{problemId}/test-cases/{id}:
+    delete:
+      summary: DeleteTestCase удаляет тест. Доступно автору задания и администратору.
+      operationId: ProblemService_DeleteTestCase
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1DeleteTestCaseResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: Задание (UUID).
+          in: path
+          required: true
+          type: string
+        - name: id
+          description: Тест (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - ProblemService
+  /v1/problems/{problemId}/test-cases/{id}:confirm:
+    post:
+      summary: ConfirmTestCase проверяет, что оба файла загружены, и включает тест в проверку.
+      operationId: ProblemService_ConfirmTestCase
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ConfirmTestCaseResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: Задание (UUID).
+          in: path
+          required: true
+          type: string
+        - name: id
+          description: Тест (UUID).
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/ProblemServiceConfirmTestCaseBody'
+      tags:
+        - ProblemService
 definitions:
+  ProblemServiceConfirmTestCaseBody:
+    type: object
+    description: ConfirmTestCaseRequest — подтверждение загрузки файлов теста.
+  ProblemServiceCreateTestCaseBody:
+    type: object
+    properties:
+      isSample:
+        type: boolean
+        description: Открытый тест.
+      points:
+        type: integer
+        format: int32
+        description: Баллы за тест, по умолчанию 1.
+    description: CreateTestCaseRequest — создание теста.
   protobufAny:
     type: object
     properties:
@@ -48,12 +378,170 @@ definitions:
         items:
           type: object
           $ref: '#/definitions/protobufAny'
+  v1Checker:
+    type: string
+    enum:
+      - CHECKER_UNSPECIFIED
+      - CHECKER_EXACT
+      - CHECKER_TOKENS
+      - CHECKER_FLOAT
+      - CHECKER_CUSTOM
+    default: CHECKER_UNSPECIFIED
+    description: |-
+      Checker — способ сравнения вывода решения с эталоном.
+
+       - CHECKER_EXACT: Побайтовое совпадение.
+       - CHECKER_TOKENS: Совпадение последовательности токенов, разделённых пробельными символами.
+       - CHECKER_FLOAT: Как TOKENS, но числа сравниваются с погрешностью float_epsilon.
+       - CHECKER_CUSTOM: Собственная программа-чекер автора задания. Пока не поддерживается.
+  v1ConfirmTestCaseResponse:
+    type: object
+    properties:
+      testCase:
+        $ref: '#/definitions/v1TestCase'
+    description: ConfirmTestCaseResponse — подтверждённый тест.
+  v1CreateProblemResponse:
+    type: object
+    properties:
+      problem:
+        $ref: '#/definitions/v1Problem'
+    description: CreateProblemResponse — созданное задание.
+  v1CreateTestCaseResponse:
+    type: object
+    properties:
+      testCase:
+        $ref: '#/definitions/v1TestCase'
+      inputUploadUrl:
+        type: string
+        description: Ссылка для HTTP PUT входных данных.
+      expectedUploadUrl:
+        type: string
+        description: Ссылка для HTTP PUT эталонного вывода.
+      uploadExpireTime:
+        type: string
+        format: date-time
+        description: До какого момента действуют ссылки.
+    description: CreateTestCaseResponse — созданный тест и ссылки для загрузки файлов.
+  v1DeleteProblemResponse:
+    type: object
+    description: DeleteProblemResponse — ответ на удаление задания.
+  v1DeleteTestCaseResponse:
+    type: object
+    description: DeleteTestCaseResponse — ответ на удаление теста.
   v1GetMeResponse:
     type: object
     properties:
       user:
         $ref: '#/definitions/v1User'
     description: GetMeResponse — профиль текущего пользователя.
+  v1GetProblemResponse:
+    type: object
+    properties:
+      problem:
+        $ref: '#/definitions/v1Problem'
+    description: GetProblemResponse — задание.
+  v1Language:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор, например "go1.27", "cpp20-gcc15".
+      name:
+        type: string
+        description: Название для интерфейса, например "Go 1.27".
+    description: Language — язык программирования и его тулчейн.
+  v1ListLanguagesResponse:
+    type: object
+    properties:
+      languages:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1Language'
+    description: ListLanguagesResponse — доступные языки.
+  v1ListProblemsResponse:
+    type: object
+    properties:
+      problems:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1Problem'
+      nextPageToken:
+        type: string
+        description: Токен следующей страницы; пустой, если это последняя страница.
+    description: ListProblemsResponse — страница заданий.
+  v1ListTestCasesResponse:
+    type: object
+    properties:
+      testCases:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1TestCase'
+    description: ListTestCasesResponse — тесты задания по порядку.
+  v1Problem:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор (UUID).
+        readOnly: true
+      authorId:
+        type: string
+        description: Автор задания (UUID пользователя).
+        readOnly: true
+      slug:
+        type: string
+        description: 'Короткий адрес для URL: строчные латинские буквы, цифры и дефисы.'
+      title:
+        type: string
+        description: Название.
+      statement:
+        type: string
+        description: Условие в Markdown.
+      timeLimitMs:
+        type: integer
+        format: int32
+        description: Ограничение времени на один тест, миллисекунды.
+      memoryLimitKb:
+        type: integer
+        format: int32
+        description: Ограничение памяти, килобайты (от 4 МБ до 2 ГБ).
+      checker:
+        $ref: '#/definitions/v1Checker'
+        description: Способ проверки вывода.
+      floatEpsilon:
+        type: number
+        format: double
+        description: Допустимая погрешность для CHECKER_FLOAT.
+      languageIds:
+        type: array
+        items:
+          type: string
+        description: Языки, на которых можно сдавать решение.
+      allowAiHints:
+        type: boolean
+        description: Разрешены ли ИИ-подсказки к заданию.
+      isPublished:
+        type: boolean
+        description: Опубликовано ли задание (видно студентам).
+      readyTestCount:
+        type: integer
+        format: int32
+        description: Число загруженных и подтверждённых тестов.
+        readOnly: true
+      createTime:
+        type: string
+        format: date-time
+        description: Время создания.
+        readOnly: true
+      updateTime:
+        type: string
+        format: date-time
+        description: Время последнего изменения.
+        readOnly: true
+    description: Problem — задание.
   v1Role:
     type: string
     enum:
@@ -68,6 +556,50 @@ definitions:
        - ROLE_STUDENT: Студент: решает задания и отправляет посылки.
        - ROLE_AUTHOR: Автор заданий: создаёт задания и тесты.
        - ROLE_ADMIN: Администратор платформы.
+  v1TestCase:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор (UUID).
+      problemId:
+        type: string
+        description: Задание (UUID).
+      ordinal:
+        type: integer
+        format: int32
+        description: Порядковый номер теста в задании, начиная с 1.
+      isSample:
+        type: boolean
+        description: 'Открытый тест: студент видит вход, эталон и diff своего вывода.'
+      points:
+        type: integer
+        format: int32
+        description: Баллы за прохождение теста.
+      isReady:
+        type: boolean
+        description: Оба файла загружены и тест участвует в проверке.
+      inputSizeBytes:
+        type: string
+        format: int64
+        description: Размер входных данных, байты. 0, пока тест не подтверждён.
+      expectedSizeBytes:
+        type: string
+        format: int64
+        description: Размер эталонного вывода, байты. 0, пока тест не подтверждён.
+      inputDownloadUrl:
+        type: string
+        description: Временная ссылка на скачивание входных данных. Пустая, если тест не загружен.
+      expectedDownloadUrl:
+        type: string
+        description: Временная ссылка на скачивание эталонного вывода. Пустая, если тест не загружен.
+    description: TestCase — тест задания.
+  v1UpdateProblemResponse:
+    type: object
+    properties:
+      problem:
+        $ref: '#/definitions/v1Problem'
+    description: UpdateProblemResponse — изменённое задание.
   v1User:
     type: object
     properties:

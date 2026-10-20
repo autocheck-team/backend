@@ -17,10 +17,12 @@ type Config struct {
 	DatabaseURL     string
 	ShutdownTimeout time.Duration
 
-	S3Endpoint  string
-	S3Bucket    string
-	S3AccessKey string
-	S3SecretKey string
+	S3Endpoint string
+	// S3PublicEndpoint — адрес хранилища для браузера (presigned-ссылки).
+	S3PublicEndpoint string
+	S3Bucket         string
+	S3AccessKey      string
+	S3SecretKey      string
 
 	WorkerID          string
 	WorkerConcurrency int
@@ -38,14 +40,15 @@ type Config struct {
 // остальное имеет значения по умолчанию для локальной разработки.
 func Load() (Config, error) {
 	c := Config{
-		HTTPAddr:    getenv("HTTP_ADDR", ":8080"),
-		GRPCAddr:    getenv("GRPC_ADDR", ":9090"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		S3Endpoint:  getenv("S3_ENDPOINT", "localhost:8333"),
-		S3Bucket:    getenv("S3_BUCKET", "autocheck"),
-		S3AccessKey: os.Getenv("S3_ACCESS_KEY"),
-		S3SecretKey: os.Getenv("S3_SECRET_KEY"),
-		WorkerID:    getenv("WORKER_ID", hostname()),
+		HTTPAddr:         getenv("HTTP_ADDR", ":8080"),
+		GRPCAddr:         getenv("GRPC_ADDR", ":9090"),
+		DatabaseURL:      os.Getenv("DATABASE_URL"),
+		S3Endpoint:       getenv("S3_ENDPOINT", "localhost:8333"),
+		S3Bucket:         getenv("S3_BUCKET", "autocheck"),
+		S3PublicEndpoint: os.Getenv("S3_PUBLIC_ENDPOINT"),
+		S3AccessKey:      os.Getenv("S3_ACCESS_KEY"),
+		S3SecretKey:      os.Getenv("S3_SECRET_KEY"),
+		WorkerID:         getenv("WORKER_ID", hostname()),
 
 		OIDCIssuer:   os.Getenv("OIDC_ISSUER"),
 		OIDCAudience: getenv("OIDC_AUDIENCE", "autocheck-api"),

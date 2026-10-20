@@ -8,10 +8,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	"buf.build/go/protovalidate"
+
 	"github.com/autocheck-team/backend/internal/auth"
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
+	"github.com/autocheck-team/backend/internal/problem"
 	"github.com/autocheck-team/backend/internal/server"
+	"github.com/autocheck-team/backend/internal/storage"
 	"github.com/autocheck-team/backend/internal/user"
 )
 
@@ -46,16 +50,29 @@ func run(log *slog.Logger) error {
 	syncer := user.NewSyncer(pool)
 	authn := auth.NewInterceptors(verifier, syncer.Sync, server.PublicMethods...)
 
-	srv, err := server.New(server.Config{
-		GRPCAddr:           cfg.GRPCAddr,
-		HTTPAddr:           cfg.HTTPAddr,
-		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
-		ShutdownTimeout:    cfg.ShutdownTimeout,
-	}, log, pool, authn, server.Services{
-		User: user.NewService(),
+	objects, err := storage.New(ctx, storage.Config{
+		Endpoint:       cfg.S3Endpoint,
+		PublicEndpoint: cfg.S3PublicEndpoint,
+		Bucket:         cfg.S3Bucket,
+		AccessKey:      cfg.S3AccessKey,
+		SecretKey:      cfg.S3SecretKey,
 	})
 	if err != nil {
 		return err
 	}
+	validator, err := protovalidate.New()
+	if err != nil {
+		return err
+	}
+
+	srv := server.New(server.Config{
+		GRPCAddr:           cfg.GRPCAddr,
+		HTTPAddr:           cfg.HTTPAddr,
+		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
+		ShutdownTimeout:    cfg.ShutdownTimeout,
+	}, log, pool, authn, validator, server.Services{
+		User:    user.NewService(),
+		Problem: problem.NewService(problem.NewRepository(pool), objects, validator),
+	})
 	return srv.Run(ctx)
 }
