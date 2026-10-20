@@ -1,0 +1,96 @@
+swagger: "2.0"
+info:
+  title: Autocheck API
+  description: Автоматическая проверка программных решений студентов.
+  version: "1.0"
+tags:
+  - name: UserService
+    description: UserService — профиль текущего пользователя.
+consumes:
+  - application/json
+produces:
+  - application/json
+paths:
+  /v1/me:
+    get:
+      summary: |-
+        GetMe возвращает профиль пользователя из access-токена. При первом вызове
+        пользователь появляется в базе платформы.
+      operationId: UserService_GetMe
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetMeResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      tags:
+        - UserService
+definitions:
+  protobufAny:
+    type: object
+    properties:
+      '@type':
+        type: string
+    additionalProperties: true
+  rpcStatus:
+    type: object
+    properties:
+      code:
+        type: integer
+        format: int32
+      message:
+        type: string
+      details:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/protobufAny'
+  v1GetMeResponse:
+    type: object
+    properties:
+      user:
+        $ref: '#/definitions/v1User'
+    description: GetMeResponse — профиль текущего пользователя.
+  v1Role:
+    type: string
+    enum:
+      - ROLE_UNSPECIFIED
+      - ROLE_STUDENT
+      - ROLE_AUTHOR
+      - ROLE_ADMIN
+    default: ROLE_UNSPECIFIED
+    description: |-
+      Role — роль пользователя на платформе. Совпадает с realm roles в Keycloak.
+
+       - ROLE_STUDENT: Студент: решает задания и отправляет посылки.
+       - ROLE_AUTHOR: Автор заданий: создаёт задания и тесты.
+       - ROLE_ADMIN: Администратор платформы.
+  v1User:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор, совпадает с sub в токене Keycloak (UUID).
+      email:
+        type: string
+        description: Email из Keycloak.
+      displayName:
+        type: string
+        description: Отображаемое имя.
+      roles:
+        type: array
+        items:
+          $ref: '#/definitions/v1Role'
+        description: Все роли пользователя.
+    description: User — профиль пользователя.
+securityDefinitions:
+  bearer:
+    type: apiKey
+    description: 'Access-токен Keycloak: `Bearer <token>`'
+    name: Authorization
+    in: header
+security:
+  - bearer: []
