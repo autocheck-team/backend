@@ -227,6 +227,9 @@ paths:
                 format: date-time
                 description: Время создания.
                 readOnly: true
+              stopOnFirstFailure:
+                type: boolean
+                description: Остановиться после первого непройденного теста.
               updateTime:
                 type: string
                 format: date-time
@@ -236,6 +239,56 @@ paths:
               Задание с новыми значениями; id обязателен. Правила Problem проверяются
               сервисом для итогового задания после применения update_mask, а не здесь:
               в запросе заполнены только изменяемые поля.
+      tags:
+        - ProblemService
+  /v1/problems/{problemId}/checker:confirm:
+    post:
+      summary: ConfirmChecker проверяет существование загруженного скрипта.
+      operationId: ProblemService_ConfirmChecker
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ConfirmCheckerResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/ProblemServiceConfirmCheckerBody'
+      tags:
+        - ProblemService
+  /v1/problems/{problemId}/checker:upload:
+    post:
+      summary: GetCheckerUpload выдаёт автору ссылку для загрузки Python-чекера.
+      operationId: ProblemService_GetCheckerUpload
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetCheckerUploadResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/ProblemServiceGetCheckerUploadBody'
       tags:
         - ProblemService
   /v1/problems/{problemId}/submissions:
@@ -454,6 +507,9 @@ paths:
       tags:
         - SubmissionService
 definitions:
+  ProblemServiceConfirmCheckerBody:
+    type: object
+    description: ConfirmCheckerRequest — подтверждение загрузки чекера.
   ProblemServiceConfirmTestCaseBody:
     type: object
     description: ConfirmTestCaseRequest — подтверждение загрузки файлов теста.
@@ -468,6 +524,9 @@ definitions:
         format: int32
         description: Баллы за тест, по умолчанию 1.
     description: CreateTestCaseRequest — создание теста.
+  ProblemServiceGetCheckerUploadBody:
+    type: object
+    description: GetCheckerUploadRequest — запрос загрузки чекера.
   SubmissionServiceCreateSubmissionBody:
     type: object
     properties:
@@ -515,7 +574,10 @@ definitions:
        - CHECKER_EXACT: Побайтовое совпадение.
        - CHECKER_TOKENS: Совпадение последовательности токенов, разделённых пробельными символами.
        - CHECKER_FLOAT: Как TOKENS, но числа сравниваются с погрешностью float_epsilon.
-       - CHECKER_CUSTOM: Собственная программа-чекер автора задания. Пока не поддерживается.
+       - CHECKER_CUSTOM: Собственный Python-чекер автора задания.
+  v1ConfirmCheckerResponse:
+    type: object
+    description: ConfirmCheckerResponse — чекер загружен.
   v1ConfirmTestCaseResponse:
     type: object
     properties:
@@ -556,6 +618,15 @@ definitions:
   v1DeleteTestCaseResponse:
     type: object
     description: DeleteTestCaseResponse — ответ на удаление теста.
+  v1GetCheckerUploadResponse:
+    type: object
+    properties:
+      uploadUrl:
+        type: string
+      uploadExpireTime:
+        type: string
+        format: date-time
+    description: GetCheckerUploadResponse — ссылка для HTTP PUT.
   v1GetMeResponse:
     type: object
     properties:
@@ -702,6 +773,9 @@ definitions:
         format: date-time
         description: Время создания.
         readOnly: true
+      stopOnFirstFailure:
+        type: boolean
+        description: Остановиться после первого непройденного теста.
       updateTime:
         type: string
         format: date-time
@@ -855,6 +929,13 @@ definitions:
         type: integer
         format: int32
         description: Пиковая память, килобайты.
+      cpuTimeMs:
+        type: integer
+        format: int32
+        description: Приблизительное CPU-время контейнера, миллисекунды.
+      stderrTail:
+        type: string
+        description: Хвост stderr только открытого теста.
     description: TestRun — результат посылки на одном тесте.
   v1UpdateProblemResponse:
     type: object

@@ -267,8 +267,8 @@ func TestGetSubmissionWithTestRuns(t *testing.T) {
 		VALUES (gen_random_uuid(), $1, 1, 'i', 'e', true) RETURNING id`, f.published).Scan(&tcID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.pool.Exec(ctx, `INSERT INTO test_runs (submission_id, test_case_id, verdict, time_ms, memory_kb)
-		VALUES ($1, $2, 'WA', 12, 2048)`, sub.GetId(), tcID); err != nil {
+	if _, err := f.pool.Exec(ctx, `INSERT INTO test_runs (submission_id, test_case_id, verdict, time_ms, memory_kb, cpu_time_ms, stderr_tail)
+        VALUES ($1, $2, 'WA', 12, 2048, 7, 'private stderr')`, sub.GetId(), tcID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.pool.Exec(ctx, `UPDATE submissions SET status = 'done', verdict = 'WA', score = 0,
@@ -286,7 +286,17 @@ func TestGetSubmissionWithTestRuns(t *testing.T) {
 		t.Fatalf("unexpected submission: %v", got)
 	}
 	if len(resp.GetTestRuns()) != 1 || resp.GetTestRuns()[0].GetVerdict() != v1.Verdict_VERDICT_WRONG_ANSWER ||
-		resp.GetTestRuns()[0].GetOrdinal() != 1 {
+		resp.GetTestRuns()[0].GetOrdinal() != 1 || resp.GetTestRuns()[0].GetCpuTimeMs() != 7 || resp.GetTestRuns()[0].GetStderrTail() != "" {
 		t.Fatalf("unexpected test runs: %v", resp.GetTestRuns())
+	}
+	if _, err := f.pool.Exec(ctx, `UPDATE test_cases SET is_sample = true WHERE id = $1`, tcID); err != nil {
+		t.Fatal(err)
+	}
+	resp, err = f.svc.GetSubmission(as(f.student), &v1.GetSubmissionRequest{Id: sub.GetId()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.GetTestRuns()[0].GetStderrTail() != "private stderr" {
+		t.Fatal("sample stderr missing")
 	}
 }

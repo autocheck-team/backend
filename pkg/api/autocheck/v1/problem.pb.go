@@ -36,7 +36,7 @@ const (
 	Checker_CHECKER_TOKENS Checker = 2
 	// Как TOKENS, но числа сравниваются с погрешностью float_epsilon.
 	Checker_CHECKER_FLOAT Checker = 3
-	// Собственная программа-чекер автора задания. Пока не поддерживается.
+	// Собственный Python-чекер автора задания.
 	Checker_CHECKER_CUSTOM Checker = 4
 )
 
@@ -171,6 +171,8 @@ type Problem struct {
 	ReadyTestCount int32 `protobuf:"varint,13,opt,name=ready_test_count,json=readyTestCount,proto3" json:"ready_test_count,omitempty"`
 	// Время создания.
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// Остановиться после первого непройденного теста.
+	StopOnFirstFailure bool `protobuf:"varint,16,opt,name=stop_on_first_failure,json=stopOnFirstFailure,proto3" json:"stop_on_first_failure,omitempty"`
 	// Время последнего изменения.
 	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -303,6 +305,13 @@ func (x *Problem) GetCreateTime() *timestamppb.Timestamp {
 		return x.CreateTime
 	}
 	return nil
+}
+
+func (x *Problem) GetStopOnFirstFailure() bool {
+	if x != nil {
+		return x.StopOnFirstFailure
+	}
+	return false
 }
 
 func (x *Problem) GetUpdateTime() *timestamppb.Timestamp {
@@ -1425,6 +1434,186 @@ func (*DeleteTestCaseResponse) Descriptor() ([]byte, []int) {
 	return file_autocheck_v1_problem_proto_rawDescGZIP(), []int{22}
 }
 
+// GetCheckerUploadRequest — запрос загрузки чекера.
+type GetCheckerUploadRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProblemId     string                 `protobuf:"bytes,1,opt,name=problem_id,json=problemId,proto3" json:"problem_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCheckerUploadRequest) Reset() {
+	*x = GetCheckerUploadRequest{}
+	mi := &file_autocheck_v1_problem_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCheckerUploadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCheckerUploadRequest) ProtoMessage() {}
+
+func (x *GetCheckerUploadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_problem_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCheckerUploadRequest.ProtoReflect.Descriptor instead.
+func (*GetCheckerUploadRequest) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_problem_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *GetCheckerUploadRequest) GetProblemId() string {
+	if x != nil {
+		return x.ProblemId
+	}
+	return ""
+}
+
+// GetCheckerUploadResponse — ссылка для HTTP PUT.
+type GetCheckerUploadResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	UploadUrl        string                 `protobuf:"bytes,1,opt,name=upload_url,json=uploadUrl,proto3" json:"upload_url,omitempty"`
+	UploadExpireTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=upload_expire_time,json=uploadExpireTime,proto3" json:"upload_expire_time,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *GetCheckerUploadResponse) Reset() {
+	*x = GetCheckerUploadResponse{}
+	mi := &file_autocheck_v1_problem_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCheckerUploadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCheckerUploadResponse) ProtoMessage() {}
+
+func (x *GetCheckerUploadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_problem_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCheckerUploadResponse.ProtoReflect.Descriptor instead.
+func (*GetCheckerUploadResponse) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_problem_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *GetCheckerUploadResponse) GetUploadUrl() string {
+	if x != nil {
+		return x.UploadUrl
+	}
+	return ""
+}
+
+func (x *GetCheckerUploadResponse) GetUploadExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UploadExpireTime
+	}
+	return nil
+}
+
+// ConfirmCheckerRequest — подтверждение загрузки чекера.
+type ConfirmCheckerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProblemId     string                 `protobuf:"bytes,1,opt,name=problem_id,json=problemId,proto3" json:"problem_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmCheckerRequest) Reset() {
+	*x = ConfirmCheckerRequest{}
+	mi := &file_autocheck_v1_problem_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmCheckerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmCheckerRequest) ProtoMessage() {}
+
+func (x *ConfirmCheckerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_problem_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmCheckerRequest.ProtoReflect.Descriptor instead.
+func (*ConfirmCheckerRequest) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_problem_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ConfirmCheckerRequest) GetProblemId() string {
+	if x != nil {
+		return x.ProblemId
+	}
+	return ""
+}
+
+// ConfirmCheckerResponse — чекер загружен.
+type ConfirmCheckerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmCheckerResponse) Reset() {
+	*x = ConfirmCheckerResponse{}
+	mi := &file_autocheck_v1_problem_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmCheckerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmCheckerResponse) ProtoMessage() {}
+
+func (x *ConfirmCheckerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_problem_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmCheckerResponse.ProtoReflect.Descriptor instead.
+func (*ConfirmCheckerResponse) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_problem_proto_rawDescGZIP(), []int{26}
+}
+
 var File_autocheck_v1_problem_proto protoreflect.FileDescriptor
 
 const file_autocheck_v1_problem_proto_rawDesc = "" +
@@ -1432,7 +1621,7 @@ const file_autocheck_v1_problem_proto_rawDesc = "" +
 	"\x1aautocheck/v1/problem.proto\x12\fautocheck.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\".\n" +
 	"\bLanguage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\x86\a\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\xb9\a\n" +
 	"\aProblem\x12\x14\n" +
 	"\x02id\x18\x01 \x01(\tB\x04\xe2A\x01\x03R\x02id\x12!\n" +
 	"\tauthor_id\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\bauthorId\x127\n" +
@@ -1453,7 +1642,8 @@ const file_autocheck_v1_problem_proto_rawDesc = "" +
 	"\fis_published\x18\f \x01(\bR\visPublished\x12.\n" +
 	"\x10ready_test_count\x18\r \x01(\x05B\x04\xe2A\x01\x03R\x0ereadyTestCount\x12A\n" +
 	"\vcreate_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampB\x04\xe2A\x01\x03R\n" +
-	"createTime\x12A\n" +
+	"createTime\x121\n" +
+	"\x15stop_on_first_failure\x18\x10 \x01(\bR\x12stopOnFirstFailure\x12A\n" +
 	"\vupdate_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampB\x04\xe2A\x01\x03R\n" +
 	"updateTime:\x93\x01\xbaH\x8f\x01\x1a\x8c\x01\n" +
 	"\x16float_epsilon_required\x12Dдля CHECKER_FLOAT нужна погрешность float_epsilon\x1a,this.checker != 3 || has(this.float_epsilon)B\x10\n" +
@@ -1527,14 +1717,24 @@ const file_autocheck_v1_problem_proto_rawDesc = "" +
 	"\n" +
 	"problem_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tproblemId\x12\x18\n" +
 	"\x02id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x18\n" +
-	"\x16DeleteTestCaseResponse*p\n" +
+	"\x16DeleteTestCaseResponse\"B\n" +
+	"\x17GetCheckerUploadRequest\x12'\n" +
+	"\n" +
+	"problem_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tproblemId\"\x83\x01\n" +
+	"\x18GetCheckerUploadResponse\x12\x1d\n" +
+	"\n" +
+	"upload_url\x18\x01 \x01(\tR\tuploadUrl\x12H\n" +
+	"\x12upload_expire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x10uploadExpireTime\"@\n" +
+	"\x15ConfirmCheckerRequest\x12'\n" +
+	"\n" +
+	"problem_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tproblemId\"\x18\n" +
+	"\x16ConfirmCheckerResponse*p\n" +
 	"\aChecker\x12\x17\n" +
 	"\x13CHECKER_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rCHECKER_EXACT\x10\x01\x12\x12\n" +
 	"\x0eCHECKER_TOKENS\x10\x02\x12\x11\n" +
 	"\rCHECKER_FLOAT\x10\x03\x12\x12\n" +
-	"\x0eCHECKER_CUSTOM\x10\x042\x97\n" +
-	"\n" +
+	"\x0eCHECKER_CUSTOM\x10\x042\xc4\f\n" +
 	"\x0eProblemService\x12o\n" +
 	"\rListLanguages\x12\".autocheck.v1.ListLanguagesRequest\x1a#.autocheck.v1.ListLanguagesResponse\"\x15\x82\xd3\xe4\x93\x02\x0f\x12\r/v1/languages\x12w\n" +
 	"\rCreateProblem\x12\".autocheck.v1.CreateProblemRequest\x1a#.autocheck.v1.CreateProblemResponse\"\x1d\x82\xd3\xe4\x93\x02\x17:\aproblem\"\f/v1/problems\x12j\n" +
@@ -1546,7 +1746,9 @@ const file_autocheck_v1_problem_proto_rawDesc = "" +
 	"\x0eCreateTestCase\x12#.autocheck.v1.CreateTestCaseRequest\x1a$.autocheck.v1.CreateTestCaseResponse\"/\x82\xd3\xe4\x93\x02):\x01*\"$/v1/problems/{problem_id}/test-cases\x12\x9c\x01\n" +
 	"\x0fConfirmTestCase\x12$.autocheck.v1.ConfirmTestCaseRequest\x1a%.autocheck.v1.ConfirmTestCaseResponse\"<\x82\xd3\xe4\x93\x026:\x01*\"1/v1/problems/{problem_id}/test-cases/{id}:confirm\x12\x86\x01\n" +
 	"\rListTestCases\x12\".autocheck.v1.ListTestCasesRequest\x1a#.autocheck.v1.ListTestCasesResponse\",\x82\xd3\xe4\x93\x02&\x12$/v1/problems/{problem_id}/test-cases\x12\x8e\x01\n" +
-	"\x0eDeleteTestCase\x12#.autocheck.v1.DeleteTestCaseRequest\x1a$.autocheck.v1.DeleteTestCaseResponse\"1\x82\xd3\xe4\x93\x02+*)/v1/problems/{problem_id}/test-cases/{id}B\xb5\x01\n" +
+	"\x0eDeleteTestCase\x12#.autocheck.v1.DeleteTestCaseRequest\x1a$.autocheck.v1.DeleteTestCaseResponse\"1\x82\xd3\xe4\x93\x02+*)/v1/problems/{problem_id}/test-cases/{id}\x12\x96\x01\n" +
+	"\x10GetCheckerUpload\x12%.autocheck.v1.GetCheckerUploadRequest\x1a&.autocheck.v1.GetCheckerUploadResponse\"3\x82\xd3\xe4\x93\x02-:\x01*\"(/v1/problems/{problem_id}/checker:upload\x12\x91\x01\n" +
+	"\x0eConfirmChecker\x12#.autocheck.v1.ConfirmCheckerRequest\x1a$.autocheck.v1.ConfirmCheckerResponse\"4\x82\xd3\xe4\x93\x02.:\x01*\")/v1/problems/{problem_id}/checker:confirmB\xb5\x01\n" +
 	"\x10com.autocheck.v1B\fProblemProtoP\x01ZBgithub.com/autocheck-team/backend/pkg/api/autocheck/v1;autocheckv1\xa2\x02\x03AXX\xaa\x02\fAutocheck.V1\xca\x02\fAutocheck\\V1\xe2\x02\x18Autocheck\\V1\\GPBMetadata\xea\x02\rAutocheck::V1b\x06proto3"
 
 var (
@@ -1562,76 +1764,85 @@ func file_autocheck_v1_problem_proto_rawDescGZIP() []byte {
 }
 
 var file_autocheck_v1_problem_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_autocheck_v1_problem_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_autocheck_v1_problem_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_autocheck_v1_problem_proto_goTypes = []any{
-	(Checker)(0),                    // 0: autocheck.v1.Checker
-	(*Language)(nil),                // 1: autocheck.v1.Language
-	(*Problem)(nil),                 // 2: autocheck.v1.Problem
-	(*TestCase)(nil),                // 3: autocheck.v1.TestCase
-	(*ListLanguagesRequest)(nil),    // 4: autocheck.v1.ListLanguagesRequest
-	(*ListLanguagesResponse)(nil),   // 5: autocheck.v1.ListLanguagesResponse
-	(*CreateProblemRequest)(nil),    // 6: autocheck.v1.CreateProblemRequest
-	(*CreateProblemResponse)(nil),   // 7: autocheck.v1.CreateProblemResponse
-	(*GetProblemRequest)(nil),       // 8: autocheck.v1.GetProblemRequest
-	(*GetProblemResponse)(nil),      // 9: autocheck.v1.GetProblemResponse
-	(*ListProblemsRequest)(nil),     // 10: autocheck.v1.ListProblemsRequest
-	(*ListProblemsResponse)(nil),    // 11: autocheck.v1.ListProblemsResponse
-	(*UpdateProblemRequest)(nil),    // 12: autocheck.v1.UpdateProblemRequest
-	(*UpdateProblemResponse)(nil),   // 13: autocheck.v1.UpdateProblemResponse
-	(*DeleteProblemRequest)(nil),    // 14: autocheck.v1.DeleteProblemRequest
-	(*DeleteProblemResponse)(nil),   // 15: autocheck.v1.DeleteProblemResponse
-	(*CreateTestCaseRequest)(nil),   // 16: autocheck.v1.CreateTestCaseRequest
-	(*CreateTestCaseResponse)(nil),  // 17: autocheck.v1.CreateTestCaseResponse
-	(*ConfirmTestCaseRequest)(nil),  // 18: autocheck.v1.ConfirmTestCaseRequest
-	(*ConfirmTestCaseResponse)(nil), // 19: autocheck.v1.ConfirmTestCaseResponse
-	(*ListTestCasesRequest)(nil),    // 20: autocheck.v1.ListTestCasesRequest
-	(*ListTestCasesResponse)(nil),   // 21: autocheck.v1.ListTestCasesResponse
-	(*DeleteTestCaseRequest)(nil),   // 22: autocheck.v1.DeleteTestCaseRequest
-	(*DeleteTestCaseResponse)(nil),  // 23: autocheck.v1.DeleteTestCaseResponse
-	(*timestamppb.Timestamp)(nil),   // 24: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),   // 25: google.protobuf.FieldMask
+	(Checker)(0),                     // 0: autocheck.v1.Checker
+	(*Language)(nil),                 // 1: autocheck.v1.Language
+	(*Problem)(nil),                  // 2: autocheck.v1.Problem
+	(*TestCase)(nil),                 // 3: autocheck.v1.TestCase
+	(*ListLanguagesRequest)(nil),     // 4: autocheck.v1.ListLanguagesRequest
+	(*ListLanguagesResponse)(nil),    // 5: autocheck.v1.ListLanguagesResponse
+	(*CreateProblemRequest)(nil),     // 6: autocheck.v1.CreateProblemRequest
+	(*CreateProblemResponse)(nil),    // 7: autocheck.v1.CreateProblemResponse
+	(*GetProblemRequest)(nil),        // 8: autocheck.v1.GetProblemRequest
+	(*GetProblemResponse)(nil),       // 9: autocheck.v1.GetProblemResponse
+	(*ListProblemsRequest)(nil),      // 10: autocheck.v1.ListProblemsRequest
+	(*ListProblemsResponse)(nil),     // 11: autocheck.v1.ListProblemsResponse
+	(*UpdateProblemRequest)(nil),     // 12: autocheck.v1.UpdateProblemRequest
+	(*UpdateProblemResponse)(nil),    // 13: autocheck.v1.UpdateProblemResponse
+	(*DeleteProblemRequest)(nil),     // 14: autocheck.v1.DeleteProblemRequest
+	(*DeleteProblemResponse)(nil),    // 15: autocheck.v1.DeleteProblemResponse
+	(*CreateTestCaseRequest)(nil),    // 16: autocheck.v1.CreateTestCaseRequest
+	(*CreateTestCaseResponse)(nil),   // 17: autocheck.v1.CreateTestCaseResponse
+	(*ConfirmTestCaseRequest)(nil),   // 18: autocheck.v1.ConfirmTestCaseRequest
+	(*ConfirmTestCaseResponse)(nil),  // 19: autocheck.v1.ConfirmTestCaseResponse
+	(*ListTestCasesRequest)(nil),     // 20: autocheck.v1.ListTestCasesRequest
+	(*ListTestCasesResponse)(nil),    // 21: autocheck.v1.ListTestCasesResponse
+	(*DeleteTestCaseRequest)(nil),    // 22: autocheck.v1.DeleteTestCaseRequest
+	(*DeleteTestCaseResponse)(nil),   // 23: autocheck.v1.DeleteTestCaseResponse
+	(*GetCheckerUploadRequest)(nil),  // 24: autocheck.v1.GetCheckerUploadRequest
+	(*GetCheckerUploadResponse)(nil), // 25: autocheck.v1.GetCheckerUploadResponse
+	(*ConfirmCheckerRequest)(nil),    // 26: autocheck.v1.ConfirmCheckerRequest
+	(*ConfirmCheckerResponse)(nil),   // 27: autocheck.v1.ConfirmCheckerResponse
+	(*timestamppb.Timestamp)(nil),    // 28: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),    // 29: google.protobuf.FieldMask
 }
 var file_autocheck_v1_problem_proto_depIdxs = []int32{
 	0,  // 0: autocheck.v1.Problem.checker:type_name -> autocheck.v1.Checker
-	24, // 1: autocheck.v1.Problem.create_time:type_name -> google.protobuf.Timestamp
-	24, // 2: autocheck.v1.Problem.update_time:type_name -> google.protobuf.Timestamp
+	28, // 1: autocheck.v1.Problem.create_time:type_name -> google.protobuf.Timestamp
+	28, // 2: autocheck.v1.Problem.update_time:type_name -> google.protobuf.Timestamp
 	1,  // 3: autocheck.v1.ListLanguagesResponse.languages:type_name -> autocheck.v1.Language
 	2,  // 4: autocheck.v1.CreateProblemRequest.problem:type_name -> autocheck.v1.Problem
 	2,  // 5: autocheck.v1.CreateProblemResponse.problem:type_name -> autocheck.v1.Problem
 	2,  // 6: autocheck.v1.GetProblemResponse.problem:type_name -> autocheck.v1.Problem
 	2,  // 7: autocheck.v1.ListProblemsResponse.problems:type_name -> autocheck.v1.Problem
 	2,  // 8: autocheck.v1.UpdateProblemRequest.problem:type_name -> autocheck.v1.Problem
-	25, // 9: autocheck.v1.UpdateProblemRequest.update_mask:type_name -> google.protobuf.FieldMask
+	29, // 9: autocheck.v1.UpdateProblemRequest.update_mask:type_name -> google.protobuf.FieldMask
 	2,  // 10: autocheck.v1.UpdateProblemResponse.problem:type_name -> autocheck.v1.Problem
 	3,  // 11: autocheck.v1.CreateTestCaseResponse.test_case:type_name -> autocheck.v1.TestCase
-	24, // 12: autocheck.v1.CreateTestCaseResponse.upload_expire_time:type_name -> google.protobuf.Timestamp
+	28, // 12: autocheck.v1.CreateTestCaseResponse.upload_expire_time:type_name -> google.protobuf.Timestamp
 	3,  // 13: autocheck.v1.ConfirmTestCaseResponse.test_case:type_name -> autocheck.v1.TestCase
 	3,  // 14: autocheck.v1.ListTestCasesResponse.test_cases:type_name -> autocheck.v1.TestCase
-	4,  // 15: autocheck.v1.ProblemService.ListLanguages:input_type -> autocheck.v1.ListLanguagesRequest
-	6,  // 16: autocheck.v1.ProblemService.CreateProblem:input_type -> autocheck.v1.CreateProblemRequest
-	8,  // 17: autocheck.v1.ProblemService.GetProblem:input_type -> autocheck.v1.GetProblemRequest
-	10, // 18: autocheck.v1.ProblemService.ListProblems:input_type -> autocheck.v1.ListProblemsRequest
-	12, // 19: autocheck.v1.ProblemService.UpdateProblem:input_type -> autocheck.v1.UpdateProblemRequest
-	14, // 20: autocheck.v1.ProblemService.DeleteProblem:input_type -> autocheck.v1.DeleteProblemRequest
-	16, // 21: autocheck.v1.ProblemService.CreateTestCase:input_type -> autocheck.v1.CreateTestCaseRequest
-	18, // 22: autocheck.v1.ProblemService.ConfirmTestCase:input_type -> autocheck.v1.ConfirmTestCaseRequest
-	20, // 23: autocheck.v1.ProblemService.ListTestCases:input_type -> autocheck.v1.ListTestCasesRequest
-	22, // 24: autocheck.v1.ProblemService.DeleteTestCase:input_type -> autocheck.v1.DeleteTestCaseRequest
-	5,  // 25: autocheck.v1.ProblemService.ListLanguages:output_type -> autocheck.v1.ListLanguagesResponse
-	7,  // 26: autocheck.v1.ProblemService.CreateProblem:output_type -> autocheck.v1.CreateProblemResponse
-	9,  // 27: autocheck.v1.ProblemService.GetProblem:output_type -> autocheck.v1.GetProblemResponse
-	11, // 28: autocheck.v1.ProblemService.ListProblems:output_type -> autocheck.v1.ListProblemsResponse
-	13, // 29: autocheck.v1.ProblemService.UpdateProblem:output_type -> autocheck.v1.UpdateProblemResponse
-	15, // 30: autocheck.v1.ProblemService.DeleteProblem:output_type -> autocheck.v1.DeleteProblemResponse
-	17, // 31: autocheck.v1.ProblemService.CreateTestCase:output_type -> autocheck.v1.CreateTestCaseResponse
-	19, // 32: autocheck.v1.ProblemService.ConfirmTestCase:output_type -> autocheck.v1.ConfirmTestCaseResponse
-	21, // 33: autocheck.v1.ProblemService.ListTestCases:output_type -> autocheck.v1.ListTestCasesResponse
-	23, // 34: autocheck.v1.ProblemService.DeleteTestCase:output_type -> autocheck.v1.DeleteTestCaseResponse
-	25, // [25:35] is the sub-list for method output_type
-	15, // [15:25] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	28, // 15: autocheck.v1.GetCheckerUploadResponse.upload_expire_time:type_name -> google.protobuf.Timestamp
+	4,  // 16: autocheck.v1.ProblemService.ListLanguages:input_type -> autocheck.v1.ListLanguagesRequest
+	6,  // 17: autocheck.v1.ProblemService.CreateProblem:input_type -> autocheck.v1.CreateProblemRequest
+	8,  // 18: autocheck.v1.ProblemService.GetProblem:input_type -> autocheck.v1.GetProblemRequest
+	10, // 19: autocheck.v1.ProblemService.ListProblems:input_type -> autocheck.v1.ListProblemsRequest
+	12, // 20: autocheck.v1.ProblemService.UpdateProblem:input_type -> autocheck.v1.UpdateProblemRequest
+	14, // 21: autocheck.v1.ProblemService.DeleteProblem:input_type -> autocheck.v1.DeleteProblemRequest
+	16, // 22: autocheck.v1.ProblemService.CreateTestCase:input_type -> autocheck.v1.CreateTestCaseRequest
+	18, // 23: autocheck.v1.ProblemService.ConfirmTestCase:input_type -> autocheck.v1.ConfirmTestCaseRequest
+	20, // 24: autocheck.v1.ProblemService.ListTestCases:input_type -> autocheck.v1.ListTestCasesRequest
+	22, // 25: autocheck.v1.ProblemService.DeleteTestCase:input_type -> autocheck.v1.DeleteTestCaseRequest
+	24, // 26: autocheck.v1.ProblemService.GetCheckerUpload:input_type -> autocheck.v1.GetCheckerUploadRequest
+	26, // 27: autocheck.v1.ProblemService.ConfirmChecker:input_type -> autocheck.v1.ConfirmCheckerRequest
+	5,  // 28: autocheck.v1.ProblemService.ListLanguages:output_type -> autocheck.v1.ListLanguagesResponse
+	7,  // 29: autocheck.v1.ProblemService.CreateProblem:output_type -> autocheck.v1.CreateProblemResponse
+	9,  // 30: autocheck.v1.ProblemService.GetProblem:output_type -> autocheck.v1.GetProblemResponse
+	11, // 31: autocheck.v1.ProblemService.ListProblems:output_type -> autocheck.v1.ListProblemsResponse
+	13, // 32: autocheck.v1.ProblemService.UpdateProblem:output_type -> autocheck.v1.UpdateProblemResponse
+	15, // 33: autocheck.v1.ProblemService.DeleteProblem:output_type -> autocheck.v1.DeleteProblemResponse
+	17, // 34: autocheck.v1.ProblemService.CreateTestCase:output_type -> autocheck.v1.CreateTestCaseResponse
+	19, // 35: autocheck.v1.ProblemService.ConfirmTestCase:output_type -> autocheck.v1.ConfirmTestCaseResponse
+	21, // 36: autocheck.v1.ProblemService.ListTestCases:output_type -> autocheck.v1.ListTestCasesResponse
+	23, // 37: autocheck.v1.ProblemService.DeleteTestCase:output_type -> autocheck.v1.DeleteTestCaseResponse
+	25, // 38: autocheck.v1.ProblemService.GetCheckerUpload:output_type -> autocheck.v1.GetCheckerUploadResponse
+	27, // 39: autocheck.v1.ProblemService.ConfirmChecker:output_type -> autocheck.v1.ConfirmCheckerResponse
+	28, // [28:40] is the sub-list for method output_type
+	16, // [16:28] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_autocheck_v1_problem_proto_init() }
@@ -1647,7 +1858,7 @@ func file_autocheck_v1_problem_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_autocheck_v1_problem_proto_rawDesc), len(file_autocheck_v1_problem_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   23,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

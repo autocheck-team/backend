@@ -337,7 +337,11 @@ type TestRun struct {
 	// Время работы, миллисекунды.
 	TimeMs int32 `protobuf:"varint,5,opt,name=time_ms,json=timeMs,proto3" json:"time_ms,omitempty"`
 	// Пиковая память, килобайты.
-	MemoryKb      int32 `protobuf:"varint,6,opt,name=memory_kb,json=memoryKb,proto3" json:"memory_kb,omitempty"`
+	MemoryKb int32 `protobuf:"varint,6,opt,name=memory_kb,json=memoryKb,proto3" json:"memory_kb,omitempty"`
+	// Приблизительное CPU-время контейнера, миллисекунды.
+	CpuTimeMs int32 `protobuf:"varint,7,opt,name=cpu_time_ms,json=cpuTimeMs,proto3" json:"cpu_time_ms,omitempty"`
+	// Хвост stderr только открытого теста.
+	StderrTail    string `protobuf:"bytes,8,opt,name=stderr_tail,json=stderrTail,proto3" json:"stderr_tail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -412,6 +416,20 @@ func (x *TestRun) GetMemoryKb() int32 {
 		return x.MemoryKb
 	}
 	return 0
+}
+
+func (x *TestRun) GetCpuTimeMs() int32 {
+	if x != nil {
+		return x.CpuTimeMs
+	}
+	return 0
+}
+
+func (x *TestRun) GetStderrTail() string {
+	if x != nil {
+		return x.StderrTail
+	}
+	return ""
 }
 
 // CreateSubmissionRequest — отправка решения.
@@ -890,7 +908,7 @@ const file_autocheck_v1_submission_proto_rawDesc = "" +
 	"finishTimeB\b\n" +
 	"\x06_scoreB\x0e\n" +
 	"\f_max_time_msB\x10\n" +
-	"\x0e_max_memory_kb\"\xc9\x01\n" +
+	"\x0e_max_memory_kb\"\x8a\x02\n" +
 	"\aTestRun\x12 \n" +
 	"\ftest_case_id\x18\x01 \x01(\tR\n" +
 	"testCaseId\x12\x18\n" +
@@ -898,7 +916,10 @@ const file_autocheck_v1_submission_proto_rawDesc = "" +
 	"\tis_sample\x18\x03 \x01(\bR\bisSample\x12/\n" +
 	"\averdict\x18\x04 \x01(\x0e2\x15.autocheck.v1.VerdictR\averdict\x12\x17\n" +
 	"\atime_ms\x18\x05 \x01(\x05R\x06timeMs\x12\x1b\n" +
-	"\tmemory_kb\x18\x06 \x01(\x05R\bmemoryKb\"\xca\x01\n" +
+	"\tmemory_kb\x18\x06 \x01(\x05R\bmemoryKb\x12\x1e\n" +
+	"\vcpu_time_ms\x18\a \x01(\x05R\tcpuTimeMs\x12\x1f\n" +
+	"\vstderr_tail\x18\b \x01(\tR\n" +
+	"stderrTail\"\xca\x01\n" +
 	"\x17CreateSubmissionRequest\x12'\n" +
 	"\n" +
 	"problem_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tproblemId\x12(\n" +

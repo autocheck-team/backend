@@ -44,6 +44,8 @@ type Submission struct {
 
 // TestRun — результат на одном тесте.
 type TestRun struct {
+	CPUTimeMS  int32
+	StderrTail string
 	TestCaseID uuid.UUID
 	Ordinal    int32
 	IsSample   bool
@@ -204,7 +206,7 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Submission, erro
 // TestRuns возвращает результаты посылки по тестам в порядке тестов.
 func (r *Repository) TestRuns(ctx context.Context, submissionID uuid.UUID) ([]TestRun, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT tr.test_case_id, tc.ordinal, tc.is_sample, tr.verdict::text, tr.time_ms, tr.memory_kb
+		SELECT tr.test_case_id, tc.ordinal, tc.is_sample, tr.verdict::text, tr.time_ms, tr.memory_kb, tr.cpu_time_ms, CASE WHEN tc.is_sample THEN coalesce(tr.stderr_tail, '') ELSE '' END
 		FROM test_runs tr JOIN test_cases tc ON tc.id = tr.test_case_id
 		WHERE tr.submission_id = $1
 		ORDER BY tc.ordinal`, submissionID)
@@ -213,7 +215,7 @@ func (r *Repository) TestRuns(ctx context.Context, submissionID uuid.UUID) ([]Te
 	}
 	runs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (TestRun, error) {
 		var t TestRun
-		return t, row.Scan(&t.TestCaseID, &t.Ordinal, &t.IsSample, &t.Verdict, &t.TimeMS, &t.MemoryKB)
+		return t, row.Scan(&t.TestCaseID, &t.Ordinal, &t.IsSample, &t.Verdict, &t.TimeMS, &t.MemoryKB, &t.CPUTimeMS, &t.StderrTail)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list test runs: %w", err)

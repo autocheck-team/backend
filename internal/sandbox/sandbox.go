@@ -17,6 +17,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -39,6 +40,8 @@ const (
 	nobody = "65534:65534"
 
 	labelKey = "autocheck.sandbox"
+	// Небольшой запас компенсирует планирование Docker и старт интерпретатора.
+	containerStartupGrace = 300 * time.Millisecond
 )
 
 // Значения по умолчанию для RunSpec.
@@ -84,6 +87,51 @@ func (s *Sandbox) EnsureImage(ctx context.Context, image string) error {
 		return fmt.Errorf("pull image %s: %w", image, err)
 	}
 	return nil
+}
+
+// Сроки уборки заведомо больше самой долгой работы: контейнер живёт один запуск (минуты),
+// а volume — всю проверку, причём между запусками к нему не подключён ни один контейнер,
+// поэтому «не используется» для него не значит «брошен».
+const (
+	orphanContainerAge = 10 * time.Minute
+	orphanVolumeAge    = 2 * time.Hour
+)
+
+// Sweep удаляет контейнеры и volume, брошенные упавшим воркером. Таймер запуска живёт в
+// воркере, поэтому после его падения решение с вечным sleep никто больше не остановит.
+// Работает по метке и возрасту, чтобы не задеть проверки других воркеров на этом хосте.
+func (s *Sandbox) Sweep(ctx context.Context) error {
+	var errs []error
+	filter := client.Filters{}.Add("label", labelKey)
+	containers, err := s.cli.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: filter})
+	if err != nil {
+		errs = append(errs, fmt.Errorf("list containers: %w", err))
+	} else {
+		for _, c := range containers.Items {
+			if time.Since(time.Unix(c.Created, 0)) < orphanContainerAge {
+				continue
+			}
+			if _, err := s.cli.ContainerRemove(ctx, c.ID, client.ContainerRemoveOptions{Force: true}); err != nil {
+				errs = append(errs, fmt.Errorf("remove container %s: %w", c.ID, err))
+			}
+		}
+	}
+	volumes, err := s.cli.VolumeList(ctx, client.VolumeListOptions{Filters: filter})
+	if err != nil {
+		errs = append(errs, fmt.Errorf("list volumes: %w", err))
+		return errors.Join(errs...)
+	}
+	for _, v := range volumes.Items {
+		created, err := time.Parse(time.RFC3339, v.CreatedAt)
+		if err != nil || time.Since(created) < orphanVolumeAge {
+			continue
+		}
+		// Без Force: volume, к которому ещё подключён контейнер, Docker удалить не даст.
+		if _, err := s.cli.VolumeRemove(ctx, v.Name, client.VolumeRemoveOptions{}); err != nil {
+			errs = append(errs, fmt.Errorf("remove volume %s: %w", v.Name, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Workspace — рабочий каталог одной проверки (docker volume).
@@ -149,10 +197,13 @@ type RunSpec struct {
 
 // Result — итог запуска.
 type Result struct {
-	ExitCode int
-	Stdout   []byte
-	Stderr   []byte
-	WallTime time.Duration
+	// Пик приблизительный: Docker stats не видит всплески между опросами.
+	PeakMemoryBytes int64
+	CPUTime         time.Duration
+	ExitCode        int
+	Stdout          []byte
+	Stderr          []byte
+	WallTime        time.Duration
 	// TimedOut — процесс убит по TimeLimit.
 	TimedOut bool
 	// OOMKilled — процесс убит ядром за превышение памяти.
@@ -241,6 +292,7 @@ func (w *Workspace) create(ctx context.Context, spec RunSpec) (string, error) {
 					{Name: "nofile", Soft: 256, Hard: 256},
 					{Name: "fsize", Soft: spec.FileSizeLimit, Hard: spec.FileSizeLimit},
 					{Name: "core", Soft: 0, Hard: 0},
+					{Name: "cpu", Soft: int64((spec.TimeLimit+time.Second-1)/time.Second) + 1, Hard: int64((spec.TimeLimit+time.Second-1)/time.Second) + 1},
 				},
 			},
 		},
@@ -319,46 +371,96 @@ func (s *Sandbox) run(ctx context.Context, id string, spec RunSpec) (Result, err
 		copied <- err
 	}()
 
-	var res Result
-	timer := time.NewTimer(spec.TimeLimit)
+	statsCtx, stopStats := context.WithCancel(ctx)
+	statsDone := make(chan Result, 1)
+	go func() { statsDone <- s.sampleStats(statsCtx, id) }()
+	defer stopStats()
+	timer := time.NewTimer(spec.TimeLimit + containerStartupGrace)
 	defer timer.Stop()
+	var res Result
 	kill := func() {
-		_, _ = s.cli.ContainerKill(context.WithoutCancel(ctx), id, client.ContainerKillOptions{})
+		killCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_, _ = s.cli.ContainerKill(killCtx, id, client.ContainerKillOptions{})
 	}
-
+	var runErr error
 	select {
 	case <-wait.Result:
 	case err := <-wait.Error:
+		runErr = fmt.Errorf("wait: %w", err)
 		kill()
-		return Result{}, fmt.Errorf("wait: %w", err)
 	case <-timer.C:
 		res.TimedOut = true
 		kill()
-		<-wait.Result
 	case <-limit.exceeded:
 		res.OutputLimitExceeded = true
 		kill()
-		<-wait.Result
 	case <-ctx.Done():
+		runErr = ctx.Err()
 		kill()
-		return Result{}, ctx.Err()
 	}
 	res.WallTime = time.Since(started)
-
-	// Поток вывода закрывается после выхода процесса; дочитываем остаток.
+	// Attach закрывается принудительно при сбое Docker, чтобы не оставить горутину чтения.
 	select {
 	case <-copied:
 	case <-time.After(5 * time.Second):
+		att.Close()
+		<-copied
 	}
-
-	info, err := s.cli.ContainerInspect(context.WithoutCancel(ctx), id, client.ContainerInspectOptions{})
+	stopStats()
+	measured := <-statsDone
+	res.PeakMemoryBytes, res.CPUTime = measured.PeakMemoryBytes, measured.CPUTime
+	if runErr != nil {
+		return Result{}, runErr
+	}
+	inspectCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	info, err := s.cli.ContainerInspect(inspectCtx, id, client.ContainerInspectOptions{})
 	if err != nil {
 		return Result{}, fmt.Errorf("inspect: %w", err)
 	}
 	res.ExitCode = info.Container.State.ExitCode
 	res.OOMKilled = info.Container.State.OOMKilled
 	res.Stdout, res.Stderr = out.Bytes(), errOut.Bytes()
+	select {
+	case <-limit.exceeded:
+		res.OutputLimitExceeded = true
+	default:
+	}
 	return res, nil
+}
+
+// sampleStats даёт приблизительный пик: между опросами возможны всплески, cgroup
+// удаляется с контейнером, а memory.peak Docker API не отдаёт. Сбой замера не
+// превращает корректный запуск в системную ошибку.
+func (s *Sandbox) sampleStats(ctx context.Context, id string) Result {
+	var res Result
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		sampleCtx, cancel := context.WithTimeout(ctx, time.Second)
+		stats, err := s.cli.ContainerStats(sampleCtx, id, client.ContainerStatsOptions{})
+		if err == nil {
+			var data container.StatsResponse
+			if json.NewDecoder(stats.Body).Decode(&data) == nil {
+				usage := data.MemoryStats.Usage
+				inactive := data.MemoryStats.Stats["inactive_file"]
+				if inactive == 0 {
+					inactive = data.MemoryStats.Stats["total_inactive_file"]
+				}
+				usage -= min(usage, inactive)
+				res.PeakMemoryBytes = max(res.PeakMemoryBytes, int64(min(usage, uint64(1<<63-1))))
+				res.CPUTime = max(res.CPUTime, time.Duration(min(data.CPUStats.CPUUsage.TotalUsage, uint64(1<<63-1))))
+			}
+			_ = stats.Body.Close()
+		}
+		cancel()
+		select {
+		case <-ctx.Done():
+			return res
+		case <-ticker.C:
+		}
+	}
 }
 
 // outputLimit — общий для stdout и stderr лимит вывода. При превышении закрывает

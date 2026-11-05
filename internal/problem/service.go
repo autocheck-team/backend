@@ -77,6 +77,8 @@ func (s *Service) CreateProblem(ctx context.Context, req *v1.CreateProblemReques
 		return nil, fmt.Errorf("generate id: %w", err)
 	}
 	p.AuthorID = user.ID
+	key := problemPrefix(p.ID) + "/checker.py"
+	p.CheckerKey = &key
 
 	created, err := s.repo.Create(ctx, p)
 	if err != nil {
@@ -166,6 +168,16 @@ func (s *Service) UpdateProblem(ctx context.Context, req *v1.UpdateProblemReques
 		return nil, err
 	}
 	p.ID, p.AuthorID = current.ID, current.AuthorID
+	p.CheckerKey, p.CheckerReady = current.CheckerKey, current.CheckerReady
+	if p.CheckerKey == nil {
+		key := problemPrefix(p.ID) + "/checker.py"
+		p.CheckerKey = &key
+	}
+	if p.IsPublished && p.Checker == "custom" {
+		if err := s.checkChecker(ctx, p); err != nil {
+			return nil, err
+		}
+	}
 	if p.IsPublished && !current.IsPublished && current.ReadyTestCount == 0 {
 		return nil, status.Error(codes.FailedPrecondition, "задание без загруженных тестов нельзя опубликовать")
 	}

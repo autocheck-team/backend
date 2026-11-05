@@ -24,8 +24,10 @@ type Config struct {
 	S3AccessKey      string
 	S3SecretKey      string
 
-	WorkerID          string
-	WorkerConcurrency int
+	WorkerID           string
+	WorkerConcurrency  int
+	WorkerPollInterval time.Duration
+	SandboxRuntime     string
 
 	// OIDCIssuer — ожидаемый claim iss в токенах Keycloak (адрес realm, как его видит браузер).
 	OIDCIssuer string
@@ -49,6 +51,7 @@ func Load() (Config, error) {
 		S3AccessKey:      os.Getenv("S3_ACCESS_KEY"),
 		S3SecretKey:      os.Getenv("S3_SECRET_KEY"),
 		WorkerID:         getenv("WORKER_ID", hostname()),
+		SandboxRuntime:   os.Getenv("SANDBOX_RUNTIME"),
 
 		OIDCIssuer:   os.Getenv("OIDC_ISSUER"),
 		OIDCAudience: getenv("OIDC_AUDIENCE", "autocheck-api"),
@@ -75,6 +78,11 @@ func Load() (Config, error) {
 		errs = append(errs, errors.New("WORKER_CONCURRENCY must be >= 1"))
 	}
 
+	if c.WorkerPollInterval, err = time.ParseDuration(getenv("WORKER_POLL_INTERVAL", "1s")); err != nil {
+		errs = append(errs, fmt.Errorf("WORKER_POLL_INTERVAL: %w", err))
+	} else if c.WorkerPollInterval <= 0 {
+		errs = append(errs, errors.New("WORKER_POLL_INTERVAL must be positive"))
+	}
 	return c, errors.Join(errs...)
 }
 

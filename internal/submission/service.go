@@ -120,6 +120,7 @@ func (s *Service) GetSubmission(ctx context.Context, req *v1.GetSubmissionReques
 		resp.TestRuns = append(resp.TestRuns, &v1.TestRun{
 			TestCaseId: r.TestCaseID.String(), Ordinal: r.Ordinal, IsSample: r.IsSample,
 			Verdict: verdictToProto(&r.Verdict), TimeMs: r.TimeMS, MemoryKb: r.MemoryKB,
+			CpuTimeMs: r.CPUTimeMS, StderrTail: r.StderrTail,
 		})
 	}
 	return resp, nil

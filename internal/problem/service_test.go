@@ -198,11 +198,13 @@ func TestCreateProblemPermissionsAndErrors(t *testing.T) {
 		_, err := f.svc.CreateProblem(as(f.author), &v1.CreateProblemRequest{Problem: p})
 		wantCode(t, err, codes.FailedPrecondition)
 	})
-	t.Run("custom_checker_not_supported", func(t *testing.T) {
+	t.Run("custom_checker_create", func(t *testing.T) {
 		p := newProblem(slug())
 		p.Checker = v1.Checker_CHECKER_CUSTOM
 		_, err := f.svc.CreateProblem(as(f.author), &v1.CreateProblemRequest{Problem: p})
-		wantCode(t, err, codes.Unimplemented)
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 }
 
@@ -405,4 +407,46 @@ func TestDeleteProblem(t *testing.T) {
 		_, err = f.svc.DeleteProblem(as(f.author), &v1.DeleteProblemRequest{Id: p.GetId()})
 		wantCode(t, err, codes.FailedPrecondition)
 	})
+}
+
+func TestCustomCheckerUploadAndPublish(t *testing.T) {
+	f := setup(t)
+	p := newProblem(slug())
+	p.Checker = v1.Checker_CHECKER_CUSTOM
+	p.StopOnFirstFailure = true
+	created, err := f.svc.CreateProblem(as(f.author), &v1.CreateProblemRequest{Problem: p})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p = created.GetProblem()
+	if !p.GetStopOnFirstFailure() {
+		t.Fatal("stop flag missing")
+	}
+	f.addReadyTest(t, f.author, p.GetId(), true)
+	publish := func() error {
+		_, err := f.svc.UpdateProblem(as(f.author), &v1.UpdateProblemRequest{Problem: &v1.Problem{Id: p.GetId(), IsPublished: true}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"is_published"}}})
+		return err
+	}
+	wantCode(t, publish(), codes.FailedPrecondition)
+	_, err = f.svc.GetCheckerUpload(as(f.student), &v1.GetCheckerUploadRequest{ProblemId: p.GetId()})
+	wantCode(t, err, codes.PermissionDenied)
+	upload, err := f.svc.GetCheckerUpload(as(f.author), &v1.GetCheckerUploadRequest{ProblemId: p.GetId()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(upload.GetUploadUrl(), "problems/"+p.GetId()+"/checker.py") {
+		t.Fatal(upload)
+	}
+	_, err = f.svc.ConfirmChecker(as(f.author), &v1.ConfirmCheckerRequest{ProblemId: p.GetId()})
+	wantCode(t, err, codes.FailedPrecondition)
+	f.objects.upload("problems/"+p.GetId()+"/checker.py", 42)
+	_, err = f.svc.ConfirmChecker(as(f.author), &v1.ConfirmCheckerRequest{ProblemId: p.GetId()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := publish(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.svc.GetCheckerUpload(as(f.author), &v1.GetCheckerUploadRequest{ProblemId: p.GetId()})
+	wantCode(t, err, codes.FailedPrecondition)
 }

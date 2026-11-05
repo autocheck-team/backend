@@ -117,6 +117,10 @@ message TestRun {
   int32 time_ms = 5;
   // Пиковая память, килобайты.
   int32 memory_kb = 6;
+  // Приблизительное CPU-время контейнера, миллисекунды.
+  int32 cpu_time_ms = 7;
+  // Хвост stderr только открытого теста.
+  string stderr_tail = 8;
 }
 
 // CreateSubmissionRequest — отправка решения.
