@@ -25,21 +25,24 @@ var (
 
 // Problem — задание.
 type Problem struct {
-	ID             uuid.UUID
-	AuthorID       uuid.UUID
-	Slug           string
-	Title          string
-	Statement      string
-	TimeLimitMS    int32
-	MemoryLimitKB  int32
-	Checker        string // значения типа checker_kind: exact, tokens, float, custom
-	FloatEpsilon   *float64
-	LanguageIDs    []string
-	AllowAIHints   bool
-	IsPublished    bool
-	ReadyTestCount int32
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	StopOnFirstFailure bool
+	CheckerKey         *string
+	CheckerReady       bool
+	ID                 uuid.UUID
+	AuthorID           uuid.UUID
+	Slug               string
+	Title              string
+	Statement          string
+	TimeLimitMS        int32
+	MemoryLimitKB      int32
+	Checker            string // значения типа checker_kind: exact, tokens, float, custom
+	FloatEpsilon       *float64
+	LanguageIDs        []string
+	AllowAIHints       bool
+	IsPublished        bool
+	ReadyTestCount     int32
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 // TestCase — тест задания.
@@ -87,7 +90,7 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 
 const problemColumns = `
 	p.id, p.author_id, p.slug, p.title, p.statement, p.time_limit_ms, p.memory_limit_kb,
-	p.checker::text, p.float_epsilon, p.allow_ai_hints, p.is_published, p.created_at, p.updated_at,
+	p.checker::text, p.float_epsilon, p.checker_key, p.checker_ready, p.stop_on_first_failure, p.allow_ai_hints, p.is_published, p.created_at, p.updated_at,
 	coalesce((SELECT array_agg(pl.language_id ORDER BY pl.language_id)
 	          FROM problem_languages pl WHERE pl.problem_id = p.id), '{}'),
 	(SELECT count(*) FROM test_cases tc WHERE tc.problem_id = p.id AND tc.is_ready)::int`
@@ -95,7 +98,7 @@ const problemColumns = `
 func scanProblem(row pgx.Row) (Problem, error) {
 	var p Problem
 	err := row.Scan(&p.ID, &p.AuthorID, &p.Slug, &p.Title, &p.Statement, &p.TimeLimitMS, &p.MemoryLimitKB,
-		&p.Checker, &p.FloatEpsilon, &p.AllowAIHints, &p.IsPublished, &p.CreatedAt, &p.UpdatedAt,
+		&p.Checker, &p.FloatEpsilon, &p.CheckerKey, &p.CheckerReady, &p.StopOnFirstFailure, &p.AllowAIHints, &p.IsPublished, &p.CreatedAt, &p.UpdatedAt,
 		&p.LanguageIDs, &p.ReadyTestCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Problem{}, ErrNotFound
@@ -124,10 +127,10 @@ func (r *Repository) Create(ctx context.Context, p Problem) (Problem, error) {
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO problems (id, author_id, slug, title, statement, time_limit_ms, memory_limit_kb,
-			                      checker, float_epsilon, allow_ai_hints, is_published)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8::checker_kind, $9, $10, $11)`,
+			                      checker, float_epsilon, allow_ai_hints, is_published, checker_key, stop_on_first_failure)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8::checker_kind, $9, $10, $11, $12, $13)`,
 			p.ID, p.AuthorID, p.Slug, p.Title, p.Statement, p.TimeLimitMS, p.MemoryLimitKB,
-			p.Checker, p.FloatEpsilon, p.AllowAIHints, p.IsPublished)
+			p.Checker, p.FloatEpsilon, p.AllowAIHints, p.IsPublished, p.CheckerKey, p.StopOnFirstFailure)
 		if err != nil {
 			return err
 		}
@@ -219,10 +222,10 @@ func (r *Repository) Update(ctx context.Context, p Problem) (Problem, error) {
 			UPDATE problems
 			SET slug = $2, title = $3, statement = $4, time_limit_ms = $5, memory_limit_kb = $6,
 			    checker = $7::checker_kind, float_epsilon = $8, allow_ai_hints = $9, is_published = $10,
-			    updated_at = now()
+			    checker_key = $11, stop_on_first_failure = $12, updated_at = now()
 			WHERE id = $1`,
 			p.ID, p.Slug, p.Title, p.Statement, p.TimeLimitMS, p.MemoryLimitKB,
-			p.Checker, p.FloatEpsilon, p.AllowAIHints, p.IsPublished)
+			p.Checker, p.FloatEpsilon, p.AllowAIHints, p.IsPublished, p.CheckerKey, p.StopOnFirstFailure)
 		if err != nil {
 			return err
 		}
@@ -342,6 +345,15 @@ func (r *Repository) DeleteTestCase(ctx context.Context, problemID, id uuid.UUID
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// SetCheckerReady фиксирует подтверждение загрузки отдельно от пользовательских полей задания.
+func (r *Repository) SetCheckerReady(ctx context.Context, id uuid.UUID, ready bool) error {
+	_, err := r.pool.Exec(ctx, `UPDATE problems SET checker_ready=$2 WHERE id=$1`, id, ready)
+	if err != nil {
+		return fmt.Errorf("set checker readiness: %w", err)
 	}
 	return nil
 }

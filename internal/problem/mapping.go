@@ -29,19 +29,17 @@ func fromProto(p *v1.Problem) (Problem, error) {
 	if !ok {
 		return Problem{}, status.Error(codes.InvalidArgument, "неизвестный checker")
 	}
-	if p.GetChecker() == v1.Checker_CHECKER_CUSTOM {
-		return Problem{}, status.Error(codes.Unimplemented, "собственные чекеры пока не поддерживаются")
-	}
 	out := Problem{
-		Slug:          p.GetSlug(),
-		Title:         p.GetTitle(),
-		Statement:     p.GetStatement(),
-		TimeLimitMS:   p.GetTimeLimitMs(),
-		MemoryLimitKB: p.GetMemoryLimitKb(),
-		Checker:       checker,
-		LanguageIDs:   p.GetLanguageIds(),
-		AllowAIHints:  p.GetAllowAiHints(),
-		IsPublished:   p.GetIsPublished(),
+		StopOnFirstFailure: p.GetStopOnFirstFailure(),
+		Slug:               p.GetSlug(),
+		Title:              p.GetTitle(),
+		Statement:          p.GetStatement(),
+		TimeLimitMS:        p.GetTimeLimitMs(),
+		MemoryLimitKB:      p.GetMemoryLimitKb(),
+		Checker:            checker,
+		LanguageIDs:        p.GetLanguageIds(),
+		AllowAIHints:       p.GetAllowAiHints(),
+		IsPublished:        p.GetIsPublished(),
 	}
 	// Погрешность имеет смысл только для CHECKER_FLOAT: для остальных не храним.
 	if p.GetChecker() == v1.Checker_CHECKER_FLOAT && p.FloatEpsilon != nil {
@@ -53,21 +51,22 @@ func fromProto(p *v1.Problem) (Problem, error) {
 
 func toProto(p Problem) *v1.Problem {
 	return &v1.Problem{
-		Id:             p.ID.String(),
-		AuthorId:       p.AuthorID.String(),
-		Slug:           p.Slug,
-		Title:          p.Title,
-		Statement:      p.Statement,
-		TimeLimitMs:    p.TimeLimitMS,
-		MemoryLimitKb:  p.MemoryLimitKB,
-		Checker:        checkerFromDB[p.Checker],
-		FloatEpsilon:   p.FloatEpsilon,
-		LanguageIds:    p.LanguageIDs,
-		AllowAiHints:   p.AllowAIHints,
-		IsPublished:    p.IsPublished,
-		ReadyTestCount: p.ReadyTestCount,
-		CreateTime:     timestamppb.New(p.CreatedAt),
-		UpdateTime:     timestamppb.New(p.UpdatedAt),
+		StopOnFirstFailure: p.StopOnFirstFailure,
+		Id:                 p.ID.String(),
+		AuthorId:           p.AuthorID.String(),
+		Slug:               p.Slug,
+		Title:              p.Title,
+		Statement:          p.Statement,
+		TimeLimitMs:        p.TimeLimitMS,
+		MemoryLimitKb:      p.MemoryLimitKB,
+		Checker:            checkerFromDB[p.Checker],
+		FloatEpsilon:       p.FloatEpsilon,
+		LanguageIds:        p.LanguageIDs,
+		AllowAiHints:       p.AllowAIHints,
+		IsPublished:        p.IsPublished,
+		ReadyTestCount:     p.ReadyTestCount,
+		CreateTime:         timestamppb.New(p.CreatedAt),
+		UpdateTime:         timestamppb.New(p.UpdatedAt),
 	}
 }
 
@@ -97,6 +96,8 @@ func applyMask(dst, src *v1.Problem, paths []string) error {
 			dst.LanguageIds = src.GetLanguageIds()
 		case "allow_ai_hints":
 			dst.AllowAiHints = src.GetAllowAiHints()
+		case "stop_on_first_failure":
+			dst.StopOnFirstFailure = src.GetStopOnFirstFailure()
 		case "is_published":
 			dst.IsPublished = src.GetIsPublished()
 		default:

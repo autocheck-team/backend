@@ -19,16 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ProblemService_ListLanguages_FullMethodName   = "/autocheck.v1.ProblemService/ListLanguages"
-	ProblemService_CreateProblem_FullMethodName   = "/autocheck.v1.ProblemService/CreateProblem"
-	ProblemService_GetProblem_FullMethodName      = "/autocheck.v1.ProblemService/GetProblem"
-	ProblemService_ListProblems_FullMethodName    = "/autocheck.v1.ProblemService/ListProblems"
-	ProblemService_UpdateProblem_FullMethodName   = "/autocheck.v1.ProblemService/UpdateProblem"
-	ProblemService_DeleteProblem_FullMethodName   = "/autocheck.v1.ProblemService/DeleteProblem"
-	ProblemService_CreateTestCase_FullMethodName  = "/autocheck.v1.ProblemService/CreateTestCase"
-	ProblemService_ConfirmTestCase_FullMethodName = "/autocheck.v1.ProblemService/ConfirmTestCase"
-	ProblemService_ListTestCases_FullMethodName   = "/autocheck.v1.ProblemService/ListTestCases"
-	ProblemService_DeleteTestCase_FullMethodName  = "/autocheck.v1.ProblemService/DeleteTestCase"
+	ProblemService_ListLanguages_FullMethodName    = "/autocheck.v1.ProblemService/ListLanguages"
+	ProblemService_CreateProblem_FullMethodName    = "/autocheck.v1.ProblemService/CreateProblem"
+	ProblemService_GetProblem_FullMethodName       = "/autocheck.v1.ProblemService/GetProblem"
+	ProblemService_ListProblems_FullMethodName     = "/autocheck.v1.ProblemService/ListProblems"
+	ProblemService_UpdateProblem_FullMethodName    = "/autocheck.v1.ProblemService/UpdateProblem"
+	ProblemService_DeleteProblem_FullMethodName    = "/autocheck.v1.ProblemService/DeleteProblem"
+	ProblemService_CreateTestCase_FullMethodName   = "/autocheck.v1.ProblemService/CreateTestCase"
+	ProblemService_ConfirmTestCase_FullMethodName  = "/autocheck.v1.ProblemService/ConfirmTestCase"
+	ProblemService_ListTestCases_FullMethodName    = "/autocheck.v1.ProblemService/ListTestCases"
+	ProblemService_DeleteTestCase_FullMethodName   = "/autocheck.v1.ProblemService/DeleteTestCase"
+	ProblemService_GetCheckerUpload_FullMethodName = "/autocheck.v1.ProblemService/GetCheckerUpload"
+	ProblemService_ConfirmChecker_FullMethodName   = "/autocheck.v1.ProblemService/ConfirmChecker"
 )
 
 // ProblemServiceClient is the client API for ProblemService service.
@@ -64,6 +66,10 @@ type ProblemServiceClient interface {
 	ListTestCases(ctx context.Context, in *ListTestCasesRequest, opts ...grpc.CallOption) (*ListTestCasesResponse, error)
 	// DeleteTestCase удаляет тест. Доступно автору задания и администратору.
 	DeleteTestCase(ctx context.Context, in *DeleteTestCaseRequest, opts ...grpc.CallOption) (*DeleteTestCaseResponse, error)
+	// GetCheckerUpload выдаёт автору ссылку для загрузки Python-чекера.
+	GetCheckerUpload(ctx context.Context, in *GetCheckerUploadRequest, opts ...grpc.CallOption) (*GetCheckerUploadResponse, error)
+	// ConfirmChecker проверяет существование загруженного скрипта.
+	ConfirmChecker(ctx context.Context, in *ConfirmCheckerRequest, opts ...grpc.CallOption) (*ConfirmCheckerResponse, error)
 }
 
 type problemServiceClient struct {
@@ -174,6 +180,26 @@ func (c *problemServiceClient) DeleteTestCase(ctx context.Context, in *DeleteTes
 	return out, nil
 }
 
+func (c *problemServiceClient) GetCheckerUpload(ctx context.Context, in *GetCheckerUploadRequest, opts ...grpc.CallOption) (*GetCheckerUploadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCheckerUploadResponse)
+	err := c.cc.Invoke(ctx, ProblemService_GetCheckerUpload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *problemServiceClient) ConfirmChecker(ctx context.Context, in *ConfirmCheckerRequest, opts ...grpc.CallOption) (*ConfirmCheckerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfirmCheckerResponse)
+	err := c.cc.Invoke(ctx, ProblemService_ConfirmChecker_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProblemServiceServer is the server API for ProblemService service.
 // All implementations must embed UnimplementedProblemServiceServer
 // for forward compatibility.
@@ -207,6 +233,10 @@ type ProblemServiceServer interface {
 	ListTestCases(context.Context, *ListTestCasesRequest) (*ListTestCasesResponse, error)
 	// DeleteTestCase удаляет тест. Доступно автору задания и администратору.
 	DeleteTestCase(context.Context, *DeleteTestCaseRequest) (*DeleteTestCaseResponse, error)
+	// GetCheckerUpload выдаёт автору ссылку для загрузки Python-чекера.
+	GetCheckerUpload(context.Context, *GetCheckerUploadRequest) (*GetCheckerUploadResponse, error)
+	// ConfirmChecker проверяет существование загруженного скрипта.
+	ConfirmChecker(context.Context, *ConfirmCheckerRequest) (*ConfirmCheckerResponse, error)
 	mustEmbedUnimplementedProblemServiceServer()
 }
 
@@ -246,6 +276,12 @@ func (UnimplementedProblemServiceServer) ListTestCases(context.Context, *ListTes
 }
 func (UnimplementedProblemServiceServer) DeleteTestCase(context.Context, *DeleteTestCaseRequest) (*DeleteTestCaseResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteTestCase not implemented")
+}
+func (UnimplementedProblemServiceServer) GetCheckerUpload(context.Context, *GetCheckerUploadRequest) (*GetCheckerUploadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCheckerUpload not implemented")
+}
+func (UnimplementedProblemServiceServer) ConfirmChecker(context.Context, *ConfirmCheckerRequest) (*ConfirmCheckerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfirmChecker not implemented")
 }
 func (UnimplementedProblemServiceServer) mustEmbedUnimplementedProblemServiceServer() {}
 func (UnimplementedProblemServiceServer) testEmbeddedByValue()                        {}
@@ -448,6 +484,42 @@ func _ProblemService_DeleteTestCase_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProblemService_GetCheckerUpload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCheckerUploadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProblemServiceServer).GetCheckerUpload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProblemService_GetCheckerUpload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProblemServiceServer).GetCheckerUpload(ctx, req.(*GetCheckerUploadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ProblemService_ConfirmChecker_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmCheckerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProblemServiceServer).ConfirmChecker(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProblemService_ConfirmChecker_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProblemServiceServer).ConfirmChecker(ctx, req.(*ConfirmCheckerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProblemService_ServiceDesc is the grpc.ServiceDesc for ProblemService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -494,6 +566,14 @@ var ProblemService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteTestCase",
 			Handler:    _ProblemService_DeleteTestCase_Handler,
+		},
+		{
+			MethodName: "GetCheckerUpload",
+			Handler:    _ProblemService_GetCheckerUpload_Handler,
+		},
+		{
+			MethodName: "ConfirmChecker",
+			Handler:    _ProblemService_ConfirmChecker_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

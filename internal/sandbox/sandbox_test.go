@@ -179,3 +179,27 @@ func TestLimits(t *testing.T) {
 		}
 	})
 }
+
+func TestResourceStatsAndCPULimit(t *testing.T) {
+	ws := newWorkspace(t, python)
+	spec := RunSpec{Image: python, Cmd: []string{"python3", "-c", "import resource,time\nassert resource.getrlimit(resource.RLIMIT_CPU)==(2,2)\na=bytearray(16*1024*1024)\nend=time.monotonic()+0.5\nwhile time.monotonic()<end: pass\n"}, TimeLimit: time.Second, MemoryBytes: 64 * mb}
+	res := run(t, ws, spec)
+	if res.ExitCode != 0 || res.PeakMemoryBytes < 16*mb || res.CPUTime <= 0 {
+		t.Fatalf("exit=%d peak=%d cpu=%s stderr=%q", res.ExitCode, res.PeakMemoryBytes, res.CPUTime, res.Stderr)
+	}
+}
+
+func TestSweepKeepsFreshResources(t *testing.T) {
+	ws := newWorkspace(t, alpine)
+	if res := run(t, ws, sh("echo kept > marker")); res.ExitCode != 0 {
+		t.Fatalf("exit=%d stderr=%q", res.ExitCode, res.Stderr)
+	}
+	if err := ws.sb.Sweep(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	// Свежий volume без подключённых контейнеров — обычная пауза между запусками проверки.
+	res := run(t, ws, sh("cat marker"))
+	if strings.TrimSpace(string(res.Stdout)) != "kept" {
+		t.Fatalf("stdout=%q stderr=%q", res.Stdout, res.Stderr)
+	}
+}

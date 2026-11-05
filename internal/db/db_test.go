@@ -136,7 +136,7 @@ func TestJudgeJobsSkipLocked(t *testing.T) {
 	})
 
 	const claim = `SELECT submission_id FROM judge_jobs
-		WHERE locked_by IS NULL AND run_after <= now()
+		WHERE submission_id = $1 AND locked_by IS NULL AND run_after <= now()
 		ORDER BY run_after LIMIT 1 FOR UPDATE SKIP LOCKED`
 
 	w1, err := pool.Begin(ctx)
@@ -145,7 +145,7 @@ func TestJudgeJobsSkipLocked(t *testing.T) {
 	}
 	defer func() { _ = w1.Rollback(ctx) }()
 	var got string
-	if err := w1.QueryRow(ctx, claim).Scan(&got); err != nil {
+	if err := w1.QueryRow(ctx, claim, id).Scan(&got); err != nil {
 		t.Fatalf("worker 1: %v", err)
 	}
 
@@ -154,7 +154,7 @@ func TestJudgeJobsSkipLocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = w2.Rollback(ctx) }()
-	if err := w2.QueryRow(ctx, claim).Scan(&got); !errors.Is(err, pgx.ErrNoRows) {
+	if err := w2.QueryRow(ctx, claim, id).Scan(&got); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("worker 2: want no rows, got %v", err)
 	}
 }

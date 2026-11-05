@@ -78,6 +78,20 @@ service ProblemService {
   rpc DeleteTestCase(DeleteTestCaseRequest) returns (DeleteTestCaseResponse) {
     option (google.api.http) = {delete: "/v1/problems/{problem_id}/test-cases/{id}"};
   }
+  // GetCheckerUpload выдаёт автору ссылку для загрузки Python-чекера.
+  rpc GetCheckerUpload(GetCheckerUploadRequest) returns (GetCheckerUploadResponse) {
+    option (google.api.http) = {
+      post: "/v1/problems/{problem_id}/checker:upload"
+      body: "*"
+    };
+  }
+  // ConfirmChecker проверяет существование загруженного скрипта.
+  rpc ConfirmChecker(ConfirmCheckerRequest) returns (ConfirmCheckerResponse) {
+    option (google.api.http) = {
+      post: "/v1/problems/{problem_id}/checker:confirm"
+      body: "*"
+    };
+  }
 }
 
 // Language — язык программирования и его тулчейн.
@@ -97,7 +111,7 @@ enum Checker {
   CHECKER_TOKENS = 2;
   // Как TOKENS, но числа сравниваются с погрешностью float_epsilon.
   CHECKER_FLOAT = 3;
-  // Собственная программа-чекер автора задания. Пока не поддерживается.
+  // Собственный Python-чекер автора задания.
   CHECKER_CUSTOM = 4;
 }
 
@@ -162,6 +176,8 @@ message Problem {
   int32 ready_test_count = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Время создания.
   google.protobuf.Timestamp create_time = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // Остановиться после первого непройденного теста.
+  bool stop_on_first_failure = 16;
   // Время последнего изменения.
   google.protobuf.Timestamp update_time = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
@@ -322,3 +338,19 @@ message DeleteTestCaseRequest {
 
 // DeleteTestCaseResponse — ответ на удаление теста.
 message DeleteTestCaseResponse {}
+
+// GetCheckerUploadRequest — запрос загрузки чекера.
+message GetCheckerUploadRequest {
+  string problem_id = 1 [(buf.validate.field).string.uuid = true];
+}
+// GetCheckerUploadResponse — ссылка для HTTP PUT.
+message GetCheckerUploadResponse {
+  string upload_url = 1;
+  google.protobuf.Timestamp upload_expire_time = 2;
+}
+// ConfirmCheckerRequest — подтверждение загрузки чекера.
+message ConfirmCheckerRequest {
+  string problem_id = 1 [(buf.validate.field).string.uuid = true];
+}
+// ConfirmCheckerResponse — чекер загружен.
+message ConfirmCheckerResponse {}
