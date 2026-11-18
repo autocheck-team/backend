@@ -31,6 +31,8 @@ erDiagram
     users ||--o{ refresh_tokens : ""
     users ||--o{ problems : "автор"
     users ||--o{ submissions : ""
+    users ||--o{ feedback_requests : "автор запроса"
+    languages |o--o{ feedback_requests : "необязательная привязка"
     problems ||--o{ test_cases : ""
     problems ||--o{ problem_languages : ""
     languages ||--o{ problem_languages : ""
@@ -96,10 +98,45 @@ erDiagram
         int attempts
         text locked_by
     }
+    feedback_requests {
+        uuid id PK
+        uuid user_id FK
+        integer type "1 compiler_update | 2 new_library | 3 other"
+        text language_id FK "необязательно"
+        text title
+        text text
+        integer status "1 new | 2 accepted | 3 rejected | 4 completed"
+        text admin_comment
+        uuid client_request_id "необязательно"
+        timestamptz created_at
+        timestamptz updated_at
+    }
 ```
 
 Таблицы для платных функций (тарифы, подписки, счётчики лимитов) и ИИ-функций появятся
 в своих задачах (HPRPR-12 и далее) отдельными миграциями.
+
+## Запросы пользователей
+
+Миграция `00008_feedback_requests.sql` добавляет `feedback_requests`. Тип и статус
+хранятся как `integer` с CHECK-ограничениями; `UNSPECIFIED = 0` не сохраняется.
+Автор ссылается на `users`, необязательный язык — на `languages`, включая неактивные.
+БД ограничивает длины заголовка (1–200), текста (1–10000) и комментария (0–5000)
+в символах. Сервис дополнительно отвергает заголовок и текст только из пробелов.
+
+Уникальный частичный индекс `(user_id, client_request_id)` предотвращает дубликаты
+даже при параллельной отправке; NULL позволяет отправлять запросы без ключа.
+Индексы по `(user_id, id DESC)`, `(status, id DESC)`, `(type, id DESC)`,
+`(status, type, id DESC)` и сочетаниям пользователя со статусом и/или типом
+поддерживают все варианты списков. Общий список использует первичный ключ.
+Keyset-пагинация сравнивает UUIDv7 (`id < cursor`); `updated_at` не влияет на порядок.
+
+Начальный статус — `new`. Сервис разрешает `new → accepted | rejected`,
+`accepted → completed | rejected` и повтор текущего статуса для правки комментария.
+Условный UPDATE сверяет прочитанный статус: параллельное изменение не может
+обойти проверку перехода. Статус, комментарий и `updated_at` обновляются атомарно,
+`created_at` сохраняется. Автор и содержимое запроса после создания неизменяемы.
+Обратная миграция 00008 не удаляет пользовательские запросы: секция Down пуста.
 
 ## Очередь и результаты проверки
 

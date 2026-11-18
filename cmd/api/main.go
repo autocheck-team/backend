@@ -13,6 +13,7 @@ import (
 	"github.com/autocheck-team/backend/internal/auth"
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
+	"github.com/autocheck-team/backend/internal/feedback"
 	"github.com/autocheck-team/backend/internal/problem"
 	"github.com/autocheck-team/backend/internal/server"
 	"github.com/autocheck-team/backend/internal/storage"
@@ -75,6 +76,7 @@ func run(log *slog.Logger) error {
 		User:       user.NewService(),
 		Problem:    problem.NewService(problem.NewRepository(pool), objects, validator),
 		Submission: submission.NewService(submission.NewRepository(pool), objects),
+		Feedback:   feedback.NewService(feedback.NewRepository(pool, cfg.FeedbackQueryTimeout), validator),
 	})
 	return srv.Run(ctx)
 }
