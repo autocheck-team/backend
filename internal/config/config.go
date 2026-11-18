@@ -35,6 +35,12 @@ type Config struct {
 	OIDCJWKSURL  string
 	OIDCAudience string
 
+	YookassaShopID      string
+	YookassaSecretKey   string
+	YookassaAPIURL      string
+	YookassaTimeout     time.Duration
+	BillingSyncInterval time.Duration
+
 	CORSAllowedOrigins []string
 }
 
@@ -42,16 +48,19 @@ type Config struct {
 // остальное имеет значения по умолчанию для локальной разработки.
 func Load() (Config, error) {
 	c := Config{
-		HTTPAddr:         getenv("HTTP_ADDR", ":8080"),
-		GRPCAddr:         getenv("GRPC_ADDR", ":9090"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		S3Endpoint:       getenv("S3_ENDPOINT", "localhost:8333"),
-		S3Bucket:         getenv("S3_BUCKET", "autocheck"),
-		S3PublicEndpoint: os.Getenv("S3_PUBLIC_ENDPOINT"),
-		S3AccessKey:      os.Getenv("S3_ACCESS_KEY"),
-		S3SecretKey:      os.Getenv("S3_SECRET_KEY"),
-		WorkerID:         getenv("WORKER_ID", hostname()),
-		SandboxRuntime:   os.Getenv("SANDBOX_RUNTIME"),
+		YookassaShopID:    os.Getenv("YOOKASSA_SHOP_ID"),
+		YookassaSecretKey: os.Getenv("YOOKASSA_SECRET_KEY"),
+		YookassaAPIURL:    getenv("YOOKASSA_API_URL", "https://api.yookassa.ru/v3"),
+		HTTPAddr:          getenv("HTTP_ADDR", ":8080"),
+		GRPCAddr:          getenv("GRPC_ADDR", ":9090"),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		S3Endpoint:        getenv("S3_ENDPOINT", "localhost:8333"),
+		S3Bucket:          getenv("S3_BUCKET", "autocheck"),
+		S3PublicEndpoint:  os.Getenv("S3_PUBLIC_ENDPOINT"),
+		S3AccessKey:       os.Getenv("S3_ACCESS_KEY"),
+		S3SecretKey:       os.Getenv("S3_SECRET_KEY"),
+		WorkerID:          getenv("WORKER_ID", hostname()),
+		SandboxRuntime:    os.Getenv("SANDBOX_RUNTIME"),
 
 		OIDCIssuer:   os.Getenv("OIDC_ISSUER"),
 		OIDCAudience: getenv("OIDC_AUDIENCE", "autocheck-api"),
@@ -82,6 +91,16 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("WORKER_POLL_INTERVAL: %w", err))
 	} else if c.WorkerPollInterval <= 0 {
 		errs = append(errs, errors.New("WORKER_POLL_INTERVAL must be positive"))
+	}
+	if c.YookassaTimeout, err = time.ParseDuration(getenv("YOOKASSA_TIMEOUT", "10s")); err != nil {
+		errs = append(errs, fmt.Errorf("YOOKASSA_TIMEOUT: %w", err))
+	} else if c.YookassaTimeout <= 0 {
+		errs = append(errs, errors.New("YOOKASSA_TIMEOUT must be positive"))
+	}
+	if c.BillingSyncInterval, err = time.ParseDuration(getenv("BILLING_SYNC_INTERVAL", "30s")); err != nil {
+		errs = append(errs, fmt.Errorf("BILLING_SYNC_INTERVAL: %w", err))
+	} else if c.BillingSyncInterval <= 0 {
+		errs = append(errs, errors.New("BILLING_SYNC_INTERVAL must be positive"))
 	}
 	return c, errors.Join(errs...)
 }

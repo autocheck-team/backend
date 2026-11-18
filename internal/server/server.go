@@ -40,6 +40,7 @@ type Services struct {
 	User       v1.UserServiceServer
 	Problem    v1.ProblemServiceServer
 	Submission v1.SubmissionServiceServer
+	Billing    v1.BillingServiceServer
 }
 
 // Server — gRPC-сервер и HTTP-шлюз.
@@ -75,6 +76,9 @@ func New(
 	v1.RegisterUserServiceServer(g, svc.User)
 	v1.RegisterProblemServiceServer(g, svc.Problem)
 	v1.RegisterSubmissionServiceServer(g, svc.Submission)
+	if svc.Billing != nil {
+		v1.RegisterBillingServiceServer(g, svc.Billing)
+	}
 
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(g, hs)
@@ -85,6 +89,8 @@ func New(
 
 // PublicMethods — gRPC-методы, доступные без токена.
 var PublicMethods = []string{
+	v1.BillingService_ListPlans_FullMethodName,
+	v1.BillingService_YookassaWebhook_FullMethodName,
 	healthpb.Health_Check_FullMethodName,
 	healthpb.Health_Watch_FullMethodName,
 	healthpb.Health_List_FullMethodName,
@@ -112,6 +118,7 @@ func (s *Server) Run(ctx context.Context) error {
 		v1.RegisterUserServiceHandler,
 		v1.RegisterProblemServiceHandler,
 		v1.RegisterSubmissionServiceHandler,
+		v1.RegisterBillingServiceHandler,
 	} {
 		if err := register(ctx, gw, conn); err != nil {
 			return fmt.Errorf("register gateway: %w", err)

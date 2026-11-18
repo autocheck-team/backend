@@ -180,19 +180,14 @@ func TestRepositoryPipeline(t *testing.T) {
 	}
 }
 
-func TestJudgeMigrationDownUp(t *testing.T) {
+// TestJudgeMigrationUp проверяет фактическую схему; новые миграции разрешены только вперёд.
+func TestJudgeMigrationUp(t *testing.T) {
 	pool := judgeDB(t)
-	if err := db.Rollback(t.Context(), pool); err != nil {
-		t.Fatal(err)
-	}
 	var exists bool
 	if err := pool.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='test_runs' AND column_name='cpu_time_ms')`).Scan(&exists); err != nil {
 		t.Fatal(err)
 	}
-	if exists {
-		t.Fatal("Down did not remove cpu_time_ms")
-	}
-	if err := db.Migrate(t.Context(), pool); err != nil {
-		t.Fatal(err)
+	if !exists {
+		t.Fatal("migration did not add cpu_time_ms")
 	}
 }

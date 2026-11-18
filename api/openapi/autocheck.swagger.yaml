@@ -6,6 +6,8 @@ info:
 tags:
   - name: UserService
     description: UserService — профиль текущего пользователя.
+  - name: BillingService
+    description: BillingService управляет оплатой доступа и показывает доступные квоты.
   - name: ProblemService
     description: ProblemService — задания, тест-кейсы и языки программирования.
   - name: SubmissionService
@@ -15,6 +17,29 @@ consumes:
 produces:
   - application/json
 paths:
+  /v1/billing/yookassa/webhook:
+    post:
+      summary: YookassaWebhook принимает уведомление без JWT и проверяет платёж через API провайдера.
+      operationId: BillingService_YookassaWebhook
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1YookassaWebhookResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: YookassaWebhookRequest использует только идентификатор, остальные поля недоверенные.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1YookassaWebhookRequest'
+      tags:
+        - BillingService
+      security: []
   /v1/languages:
     get:
       summary: ListLanguages возвращает доступные языки программирования.
@@ -47,6 +72,49 @@ paths:
             $ref: '#/definitions/rpcStatus'
       tags:
         - UserService
+  /v1/payments/me:
+    get:
+      summary: ListMyPayments возвращает платежи только текущего пользователя.
+      operationId: BillingService_ListMyPayments
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListMyPaymentsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: pageSize
+          description: Размер страницы, по умолчанию 20, максимум 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Непрозрачный токен предыдущей страницы.
+          in: query
+          required: false
+          type: string
+      tags:
+        - BillingService
+  /v1/plans:
+    get:
+      summary: ListPlans возвращает публичный каталог тарифов.
+      operationId: BillingService_ListPlans
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListPlansResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      tags:
+        - BillingService
+      security: []
   /v1/problems:
     get:
       summary: |-
@@ -506,6 +574,43 @@ paths:
           type: string
       tags:
         - SubmissionService
+  /v1/subscriptions/me:
+    get:
+      summary: GetMySubscription возвращает эффективный тариф и остатки текущего месяца UTC.
+      operationId: BillingService_GetMySubscription
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetMySubscriptionResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      tags:
+        - BillingService
+  /v1/subscriptions:checkout:
+    post:
+      summary: CheckoutSubscription создаёт оплату; повтор с тем же ключом возвращает тот же платёж.
+      operationId: BillingService_CheckoutSubscription
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CheckoutSubscriptionResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: CheckoutSubscriptionRequest фиксирует намерение оплаты, чтобы повтор не списал деньги дважды.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1CheckoutSubscriptionRequest'
+      tags:
+        - BillingService
 definitions:
   ProblemServiceConfirmCheckerBody:
     type: object
@@ -575,6 +680,29 @@ definitions:
        - CHECKER_TOKENS: Совпадение последовательности токенов, разделённых пробельными символами.
        - CHECKER_FLOAT: Как TOKENS, но числа сравниваются с погрешностью float_epsilon.
        - CHECKER_CUSTOM: Собственный Python-чекер автора задания.
+  v1CheckoutSubscriptionRequest:
+    type: object
+    properties:
+      planCode:
+        type: string
+        description: Код платного тарифа.
+      returnUrl:
+        type: string
+        description: Абсолютный HTTP(S) адрес возврата после оплаты.
+      requestId:
+        type: string
+        description: UUID запроса, повторять при сетевых ошибках.
+    description: CheckoutSubscriptionRequest фиксирует намерение оплаты, чтобы повтор не списал деньги дважды.
+  v1CheckoutSubscriptionResponse:
+    type: object
+    properties:
+      payment:
+        $ref: '#/definitions/v1Payment'
+        description: Локальная запись оплаты.
+      confirmationUrl:
+        type: string
+        description: Адрес ЮKassa для редиректа; пусто у завершённого платежа.
+    description: CheckoutSubscriptionResponse содержит адрес страницы подтверждения оплаты.
   v1ConfirmCheckerResponse:
     type: object
     description: ConfirmCheckerResponse — чекер загружен.
@@ -633,6 +761,43 @@ definitions:
       user:
         $ref: '#/definitions/v1User'
     description: GetMeResponse — профиль текущего пользователя.
+  v1GetMySubscriptionResponse:
+    type: object
+    properties:
+      plan:
+        $ref: '#/definitions/v1Plan'
+        description: Эффективный тариф.
+      status:
+        type: string
+        description: active, expired или free, если оплаты ещё не было.
+      startTime:
+        type: string
+        format: date-time
+        description: Начало оплаченного доступа, отсутствует без подписки.
+      endTime:
+        type: string
+        format: date-time
+        description: Конец оплаченного доступа, отсутствует без подписки.
+      testRunsUsed:
+        type: string
+        format: int64
+        description: Число сохранённых прогонов за текущий месяц UTC.
+      testRunsRemaining:
+        type: string
+        format: int64
+        description: Остаток за вычетом прогонов и резерва очереди; -1 — без ограничения.
+      compilationsRemaining:
+        type: string
+        format: int64
+        description: Остаток компиляций в текущем окне; -1 — без ограничения.
+      compilationRetryAfterSeconds:
+        type: string
+        format: int64
+        description: Число секунд до следующей доступной компиляции; ноль — уже доступна.
+      checkoutEnabled:
+        type: boolean
+        description: Доступно ли оформление оплаты в этом окружении.
+    description: GetMySubscriptionResponse показывает эффективный тариф; после истечения действует free.
   v1GetProblemResponse:
     type: object
     properties:
@@ -684,6 +849,29 @@ definitions:
           type: object
           $ref: '#/definitions/v1Language'
     description: ListLanguagesResponse — доступные языки.
+  v1ListMyPaymentsResponse:
+    type: object
+    properties:
+      payments:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1Payment'
+        description: Платежи текущего пользователя.
+      nextPageToken:
+        type: string
+        description: Пусто на последней странице.
+    description: ListMyPaymentsResponse возвращает страницу от новых платежей к старым.
+  v1ListPlansResponse:
+    type: object
+    properties:
+      plans:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1Plan'
+        description: Каталог тарифов.
+    description: ListPlansResponse содержит доступные тарифы.
   v1ListProblemsResponse:
     type: object
     properties:
@@ -717,6 +905,57 @@ definitions:
           type: object
           $ref: '#/definitions/v1TestCase'
     description: ListTestCasesResponse — тесты задания по порядку.
+  v1Payment:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Наш UUID платежа.
+      planCode:
+        type: string
+        description: Код купленного тарифа.
+      amountKopecks:
+        type: string
+        format: int64
+        description: Зафиксированная при оформлении сумма в копейках.
+      status:
+        type: string
+        description: pending, succeeded или canceled.
+      createTime:
+        type: string
+        format: date-time
+        description: Момент создания записи.
+    description: Payment не содержит ключей доступа или платёжных реквизитов.
+  v1Plan:
+    type: object
+    properties:
+      code:
+        type: string
+        description: Стабильный код тарифа.
+      name:
+        type: string
+        description: Название для пользователя.
+      amountKopecks:
+        type: string
+        format: int64
+        description: Цена в копейках.
+      periodDays:
+        type: integer
+        format: int32
+        description: Продолжительность оплаченного периода в днях.
+      compilationLimit:
+        type: integer
+        format: int32
+        description: Число компиляций в скользящем окне; ноль — без ограничения.
+      compilationWindowSeconds:
+        type: integer
+        format: int32
+        description: Длительность скользящего окна в секундах.
+      monthlyTestRunLimit:
+        type: integer
+        format: int32
+        description: Число прогонов за календарный месяц UTC; ноль — без ограничения.
+    description: Plan содержит цену в копейках и ограничения, ноль лимита означает отсутствие ограничения.
   v1Problem:
     type: object
     properties:
@@ -983,6 +1222,29 @@ definitions:
        - VERDICT_MEMORY_LIMIT_EXCEEDED: Превышено ограничение памяти.
        - VERDICT_RUNTIME_ERROR: Ошибка выполнения (ненулевой код возврата, падение).
        - VERDICT_SYSTEM_ERROR: Сбой проверяющей системы, не вина решения.
+  v1YookassaWebhookObject:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор платежа ЮKassa.
+    description: YookassaWebhookObject выделяет только идентификатор из объекта провайдера.
+  v1YookassaWebhookRequest:
+    type: object
+    properties:
+      type:
+        type: string
+        description: Тип уведомления провайдера.
+      event:
+        type: string
+        description: Имя события; не служит доказательством оплаты.
+      object:
+        $ref: '#/definitions/v1YookassaWebhookObject'
+        description: Минимальное представление объекта оплаты.
+    description: YookassaWebhookRequest использует только идентификатор, остальные поля недоверенные.
+  v1YookassaWebhookResponse:
+    type: object
+    description: YookassaWebhookResponse подтверждает обработку уведомления.
 securityDefinitions:
   bearer:
     type: apiKey

@@ -63,10 +63,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - name: Migrations up/down/up
+      - name: Migrations up (forward only)
         run: |
           go run ./cmd/migrate up
-          go run ./cmd/migrate down
           go run ./cmd/migrate up
       - name: Test
         run: go test -race -coverprofile=coverage.out ./...

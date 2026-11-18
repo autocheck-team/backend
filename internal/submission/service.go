@@ -9,11 +9,14 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/autocheck-team/backend/internal/auth"
+	"github.com/autocheck-team/backend/internal/billing"
 	v1 "github.com/autocheck-team/backend/pkg/api/autocheck/v1"
 )
 
@@ -100,6 +103,17 @@ func (s *Service) CreateSubmission(ctx context.Context, req *v1.CreateSubmission
 		created, err = s.repo.FindByClientRequest(ctx, user.ID, *requestID)
 	}
 	if err != nil {
+		var limit *billing.LimitError
+		if errors.As(err, &limit) {
+			if limit.RetryAfter == 0 {
+				return nil, status.Error(codes.ResourceExhausted, "лимит бесплатных прогонов исчерпан, оформите подписку")
+			}
+			result, detailErr := status.New(codes.ResourceExhausted, "лимит компиляций исчерпан, повторите позже").WithDetails(&errdetails.RetryInfo{RetryDelay: durationpb.New(limit.RetryAfter)})
+			if detailErr != nil {
+				return nil, fmt.Errorf("encode compilation retry: %w", detailErr)
+			}
+			return nil, result.Err()
+		}
 		return nil, err
 	}
 	return &v1.CreateSubmissionResponse{Submission: toProto(created)}, nil

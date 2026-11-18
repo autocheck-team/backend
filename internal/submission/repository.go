@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/autocheck-team/backend/internal/billing"
 )
 
 // ErrNotFound — посылки или задания нет.
@@ -127,11 +129,30 @@ func scanSubmission(row pgx.Row) (Submission, error) {
 // Create сохраняет посылку и ставит её в очередь проверки одной транзакцией:
 // посылка не может оказаться в базе без задания в очереди.
 func (r *Repository) Create(ctx context.Context, s Submission) (Submission, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO submissions (id, problem_id, user_id, language_id, source_key, source_size, client_request_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			s.ID, s.ProblemID, s.UserID, s.LanguageID, s.SourceKey, s.SourceSize, s.ClientRequestID)
+		if _, err := tx.Exec(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, s.UserID); err != nil {
+			return fmt.Errorf("lock submission owner: %w", err)
+		}
+		// Повтор с прежним ключом не расходует квоту, даже при гонке двух запросов.
+		if s.ClientRequestID != nil {
+			var exists bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM submissions WHERE user_id=$1 AND client_request_id=$2)`, s.UserID, *s.ClientRequestID).Scan(&exists); err != nil {
+				return fmt.Errorf("check submission retry: %w", err)
+			}
+			if exists {
+				return errDuplicateRequest
+			}
+		}
+		budget, err := billing.CheckSubmission(ctx, tx, s.UserID, s.ProblemID, s.LanguageID)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO submissions (id, problem_id, user_id, language_id, source_key, source_size, client_request_id, test_run_budget)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			s.ID, s.ProblemID, s.UserID, s.LanguageID, s.SourceKey, s.SourceSize, s.ClientRequestID, budget)
 		if err != nil {
 			return err
 		}
