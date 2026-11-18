@@ -99,10 +99,13 @@ func (r *Runner) workspace(ctx context.Context) (Workspace, error) {
 	return r.sandbox.NewWorkspace(ctx)
 }
 
-func closeWorkspace(ctx context.Context, w Workspace) {
+func closeWorkspace(ctx context.Context, w Workspace) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	_ = w.Close(ctx)
+	if err := w.Close(ctx); err != nil {
+		return fmt.Errorf("close workspace: %w", err)
+	}
+	return nil
 }
 
 func runWorkspace(ctx context.Context, w Workspace, spec sandbox.RunSpec) (sandbox.Result, error) {
@@ -113,7 +116,7 @@ func runWorkspace(ctx context.Context, w Workspace, spec sandbox.RunSpec) (sandb
 }
 
 // Run не кладёт эталон в workspace решения, даже для открытых тестов.
-func (r *Runner) Run(ctx context.Context, j Job) (Outcome, error) {
+func (r *Runner) Run(ctx context.Context, j Job) (outcome Outcome, runErr error) {
 	if err := r.repo.Start(ctx, j); err != nil {
 		return Outcome{}, err
 	}
@@ -135,9 +138,11 @@ func (r *Runner) Run(ctx context.Context, j Job) (Outcome, error) {
 	if err != nil {
 		return Outcome{}, fmt.Errorf("create solution workspace: %w", err)
 	}
-	defer closeWorkspace(ctx, ws)
+	defer func() {
+		runErr = errors.Join(runErr, closeWorkspace(ctx, ws))
+	}()
 	ws.AddFile(task.Language.SourceFile, source, 0o644)
-	outcome := Outcome{Verdict: "OK"}
+	outcome = Outcome{Verdict: "OK"}
 	if len(task.Language.CompileCmd) > 0 {
 		result, err := runWorkspace(ctx, ws, sandbox.RunSpec{
 			Image: task.Language.Image, Cmd: task.Language.CompileCmd,
@@ -246,14 +251,16 @@ func (r *Runner) Run(ctx context.Context, j Job) (Outcome, error) {
 
 func metric(n int64) int32 { return int32(min(max(n, 0), 1<<31-1)) }
 
-func (r *Runner) custom(ctx context.Context, checker, input, expected, actual []byte) (string, error) {
+func (r *Runner) custom(ctx context.Context, checker, input, expected, actual []byte) (verdict string, runErr error) {
 	// Новый volume на каждый тест защищает и от оставленных решением файлов, и от
 	// состояния предыдущего запуска чекера. Эталон никогда не монтируется решению.
 	ws, err := r.workspace(ctx)
 	if err != nil {
 		return "", fmt.Errorf("create checker workspace: %w", err)
 	}
-	defer closeWorkspace(ctx, ws)
+	defer func() {
+		runErr = errors.Join(runErr, closeWorkspace(ctx, ws))
+	}()
 	ws.AddFile("checker.py", checker, 0o644)
 	ws.AddFile("input", input, 0o644)
 	ws.AddFile("expected", expected, 0o644)

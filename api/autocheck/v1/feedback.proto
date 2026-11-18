@@ -1,0 +1,177 @@
+syntax = "proto3";
+
+package autocheck.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+// FeedbackService — запросы пользователей об изменениях платформы.
+service FeedbackService {
+  // CreateFeedbackRequest создаёт запрос от имени вошедшего пользователя.
+  rpc CreateFeedbackRequest(CreateFeedbackRequestRequest) returns (CreateFeedbackRequestResponse) {
+    option (google.api.http) = {
+      post: "/v1/feedback-requests"
+      body: "*"
+    };
+  }
+  // ListFeedbackRequests возвращает свои запросы, для администратора — все, новые первыми.
+  rpc ListFeedbackRequests(ListFeedbackRequestsRequest) returns (ListFeedbackRequestsResponse) {
+    option (google.api.http) = {get: "/v1/feedback-requests"};
+  }
+  // GetFeedbackRequest возвращает свой запрос или любой для администратора.
+  rpc GetFeedbackRequest(GetFeedbackRequestRequest) returns (GetFeedbackRequestResponse) {
+    option (google.api.http) = {get: "/v1/feedback-requests/{id}"};
+  }
+  // UpdateFeedbackRequest меняет статус и комментарий; доступен только администратору.
+  // Новый запрос можно принять или отклонить, принятый — выполнить или отклонить.
+  // Повтор текущего статуса позволяет исправить комментарий, включая его очистку.
+  rpc UpdateFeedbackRequest(UpdateFeedbackRequestRequest) returns (UpdateFeedbackRequestResponse) {
+    option (google.api.http) = {
+      patch: "/v1/feedback-requests/{id}"
+      body: "*"
+    };
+  }
+}
+
+// FeedbackRequestType — предмет запроса.
+enum FeedbackRequestType {
+  // Тип не указан; допустим только как отсутствие фильтра списка.
+  FEEDBACK_REQUEST_TYPE_UNSPECIFIED = 0;
+  // Обновление компилятора или версии языка.
+  FEEDBACK_REQUEST_TYPE_COMPILER_UPDATE = 1;
+  // Добавление библиотеки.
+  FEEDBACK_REQUEST_TYPE_NEW_LIBRARY = 2;
+  // Остальные предложения.
+  FEEDBACK_REQUEST_TYPE_OTHER = 3;
+}
+
+// FeedbackRequestStatus — состояние рассмотрения запроса.
+enum FeedbackRequestStatus {
+  // Статус не указан; допустим только как отсутствие фильтра списка.
+  FEEDBACK_REQUEST_STATUS_UNSPECIFIED = 0;
+  // Ожидает рассмотрения.
+  FEEDBACK_REQUEST_STATUS_NEW = 1;
+  // Принят в работу.
+  FEEDBACK_REQUEST_STATUS_ACCEPTED = 2;
+  // Отклонён; конечный статус.
+  FEEDBACK_REQUEST_STATUS_REJECTED = 3;
+  // Выполнен; конечный статус.
+  FEEDBACK_REQUEST_STATUS_COMPLETED = 4;
+}
+
+// FeedbackRequest — запрос пользователя об изменениях платформы.
+message FeedbackRequest {
+  // Идентификатор запроса (UUID).
+  string id = 1;
+  // Автор запроса (UUID).
+  string user_id = 2;
+  // Предмет запроса.
+  FeedbackRequestType type = 3;
+  // Связанный язык; пусто, если запрос не привязан к языку.
+  optional string language_id = 4;
+  // Заголовок, от 1 до 200 символов.
+  string title = 5;
+  // Текст, от 1 до 10000 символов.
+  string text = 6;
+  // Текущее состояние рассмотрения.
+  FeedbackRequestStatus status = 7;
+  // Комментарий администратора, до 5000 символов; пусто, если комментария нет.
+  string admin_comment = 8;
+  // Время создания.
+  google.protobuf.Timestamp create_time = 9;
+  // Время последнего изменения.
+  google.protobuf.Timestamp update_time = 10;
+}
+
+// CreateFeedbackRequestRequest — создание запроса.
+message CreateFeedbackRequestRequest {
+  // Предмет запроса; обязателен.
+  FeedbackRequestType type = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Существующий язык, включая выключенный; отсутствие означает запрос без привязки.
+  optional string language_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  // Заголовок, от 1 до 200 символов; не может состоять только из пробелов.
+  string title = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+    pattern: "[^\\s]"
+  }];
+  // Текст, от 1 до 10000 символов; не может состоять только из пробелов.
+  string text = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 10000
+    pattern: "[^\\s]"
+  }];
+  // Необязательный ключ идемпотентности (UUID), уникальный в пределах автора.
+  // Повтор возвращает первоначальный запрос, даже если содержимое изменилось.
+  string client_request_id = 5 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+// CreateFeedbackRequestResponse — созданный или ранее созданный запрос.
+message CreateFeedbackRequestResponse {
+  // Сохранённый запрос.
+  FeedbackRequest feedback_request = 1;
+}
+
+// ListFeedbackRequestsRequest — фильтры и пагинация.
+message ListFeedbackRequestsRequest {
+  // Статус; UNSPECIFIED означает любой.
+  FeedbackRequestStatus status = 1 [(buf.validate.field).enum.defined_only = true];
+  // Тип; UNSPECIFIED означает любой.
+  FeedbackRequestType type = 2 [(buf.validate.field).enum.defined_only = true];
+  // Размер страницы; 0 означает 20, максимум 100.
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  // Непрозрачный токен следующей страницы; пусто для первой.
+  string page_token = 4 [(buf.validate.field).string.max_len = 100];
+}
+
+// ListFeedbackRequestsResponse — страница запросов.
+message ListFeedbackRequestsResponse {
+  // Запросы, новые первыми.
+  repeated FeedbackRequest feedback_requests = 1;
+  // Токен следующей страницы; пусто для последней.
+  string next_page_token = 2;
+}
+
+// GetFeedbackRequestRequest — идентификатор запроса.
+message GetFeedbackRequestRequest {
+  // Идентификатор (UUID).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetFeedbackRequestResponse — доступный пользователю запрос.
+message GetFeedbackRequestResponse {
+  // Запрос пользователя.
+  FeedbackRequest feedback_request = 1;
+}
+
+// UpdateFeedbackRequestRequest — полная замена статуса и комментария администратором.
+message UpdateFeedbackRequestRequest {
+  // Идентификатор (UUID).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Новый статус; обязателен, переход проверяется сервисом.
+  FeedbackRequestStatus status = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Комментарий до 5000 символов; пустое значение очищает комментарий.
+  string admin_comment = 3 [(buf.validate.field).string.max_len = 5000];
+}
+
+// UpdateFeedbackRequestResponse — изменённый запрос.
+message UpdateFeedbackRequestResponse {
+  // Состояние после изменения.
+  FeedbackRequest feedback_request = 1;
+}

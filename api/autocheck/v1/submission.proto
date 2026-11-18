@@ -25,6 +25,18 @@ service SubmissionService {
     option (google.api.http) = {get: "/v1/submissions/{id}"};
   }
 
+  // WatchSubmission сразу возвращает состояние и затем изменения до done/failed.
+  // Права совпадают с GetSubmission; через 10 минут требуется новое подключение.
+  rpc WatchSubmission(WatchSubmissionRequest) returns (stream WatchSubmissionResponse) {
+    option (google.api.http) = {get: "/v1/submissions/{id}:watch"};
+  }
+
+  // GetSubmissionReport возвращает отчёт; данные закрытых тестов не раскрываются.
+  // Права совпадают с GetSubmission.
+  rpc GetSubmissionReport(GetSubmissionReportRequest) returns (GetSubmissionReportResponse) {
+    option (google.api.http) = {get: "/v1/submissions/{id}/report"};
+  }
+
   // ListSubmissions возвращает посылки, новые первыми. Без problem_id — свои посылки.
   // С problem_id автор задания и администратор видят посылки всех пользователей.
   rpc ListSubmissions(ListSubmissionsRequest) returns (ListSubmissionsResponse) {
@@ -196,4 +208,75 @@ message GetSubmissionSourceResponse {
   string file_name = 2;
   // Исходный код.
   string source = 3;
+}
+
+// WatchSubmissionRequest — подписка на посылку.
+message WatchSubmissionRequest {
+  // Посылка (UUID).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// WatchSubmissionResponse — актуальное состояние, а не журнал переходов.
+message WatchSubmissionResponse {
+  // Состояние посылки на момент чтения БД.
+  Submission submission = 1;
+}
+
+// GetSubmissionReportRequest — запрос отчёта.
+message GetSubmissionReportRequest {
+  // Посылка (UUID).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetSubmissionReportResponse — отчёт, до завершения проверки может быть неполным.
+message GetSubmissionReportResponse {
+  // Идентификатор языка решения.
+  string language_id = 1;
+  // Текущий этап проверки.
+  SubmissionStatus status = 2;
+  // Итоговый вердикт; UNSPECIFIED до завершения.
+  Verdict verdict = 3;
+  // Набранные баллы; отсутствуют до расчёта.
+  optional int32 score = 4;
+  // Лог компиляции только при CE, до 64 КиБ.
+  string compile_log = 5;
+  // Выполненные тесты в порядке ordinal.
+  repeated SubmissionTestReport test_runs = 6;
+}
+
+// ReportText — текстовый префикс объекта с ограничением объёма.
+message ReportText {
+  // До 4096 байт UTF-8; невалидные последовательности заменяются на U+FFFD.
+  string text = 1;
+  // Исходный объект не поместился полностью.
+  bool is_truncated = 2;
+}
+
+// SubmissionTestReport — результат и безопасные пояснения по тесту.
+message SubmissionTestReport {
+  // Порядковый номер теста.
+  int32 ordinal = 1;
+  // Признак открытого теста.
+  bool is_sample = 2;
+  // Вердикт теста.
+  Verdict verdict = 3;
+  // Время выполнения, миллисекунды.
+  int32 time_ms = 4;
+  // Пик памяти, килобайты.
+  int32 memory_kb = 5;
+  // Приблизительное CPU-время, миллисекунды.
+  int32 cpu_time_ms = 6;
+  // Превышено время (TL).
+  bool is_time_limit_exceeded = 7;
+  // Превышена память (ML).
+  bool is_memory_limit_exceeded = 8;
+  // Вход только открытого теста с WA; иначе отсутствует.
+  ReportText input = 9;
+  // Эталон только открытого теста с WA; иначе отсутствует.
+  ReportText expected_output = 10;
+  // Фактический вывод только открытого теста с WA; отсутствует у старых прогонов без stdout.
+  ReportText actual_output = 11;
+  // Построчный diff показанных префиксов: пробел = совпадение, минус = эталон, плюс = вывод.
+  // Сохраняет CR и различие завершающего LF; пусто без сохранённого stdout.
+  string diff = 12;
 }

@@ -17,6 +17,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	_ "embed" // Профиль поставляется вместе с бинарником, а не зависит от файлов хоста.
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +33,12 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 )
+
+// Штатный профиль Moby с запретом ptrace и process_vm_* сохраняет остальные
+// ограничения Docker; источник и изменения описаны в docs/sandbox-security.md.
+//
+//go:embed seccomp.json
+var seccompProfile string
 
 const (
 	// WorkDir — рабочий каталог решения внутри контейнера.
@@ -50,6 +57,8 @@ const (
 	DefaultOutputLimit   = 16 << 20 // 16 МБ на stdout и stderr вместе
 	DefaultFileSizeLimit = 64 << 20 // 64 МБ на один файл
 	DefaultCPUs          = 1.0
+	// WorkspaceBytes ограничивает сумму файлов, а не только размер одного файла.
+	WorkspaceBytes = 256 << 20
 )
 
 // Sandbox запускает контейнеры через Docker Engine API.
@@ -108,7 +117,11 @@ func (s *Sandbox) Sweep(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("list containers: %w", err))
 	} else {
 		for _, c := range containers.Items {
-			if time.Since(time.Unix(c.Created, 0)) < orphanContainerAge {
+			age := orphanContainerAge
+			if c.Labels[labelKey] == "workspace" {
+				age = orphanVolumeAge
+			}
+			if time.Since(time.Unix(c.Created, 0)) < age {
 				continue
 			}
 			if _, err := s.cli.ContainerRemove(ctx, c.ID, client.ContainerRemoveOptions{Force: true}); err != nil {
@@ -138,6 +151,7 @@ func (s *Sandbox) Sweep(ctx context.Context) error {
 type Workspace struct {
 	sb     *Sandbox
 	volume string
+	keeper string
 
 	mu      sync.Mutex
 	pending map[string]file
@@ -153,6 +167,12 @@ func (s *Sandbox) NewWorkspace(ctx context.Context) (*Workspace, error) {
 	name := "autocheck-ws-" + uuid.NewString()
 	if _, err := s.cli.VolumeCreate(ctx, client.VolumeCreateOptions{
 		Name: name, Labels: map[string]string{labelKey: "workspace"},
+		Driver: "local",
+		// tmpfs не расходует диск Docker; nosuid закрывает setuid в скомпилированных файлах.
+		DriverOpts: map[string]string{
+			"type": "tmpfs", "device": "tmpfs",
+			"o": fmt.Sprintf("size=%d,nr_inodes=16384,mode=0755,nosuid,nodev", WorkspaceBytes),
+		},
 	}); err != nil {
 		return nil, fmt.Errorf("create workspace volume: %w", err)
 	}
@@ -168,6 +188,12 @@ func (w *Workspace) AddFile(name string, data []byte, mode int64) {
 
 // Close удаляет рабочее пространство со всеми файлами.
 func (w *Workspace) Close(ctx context.Context) error {
+	if w.keeper != "" {
+		if _, err := w.sb.cli.ContainerRemove(ctx, w.keeper, client.ContainerRemoveOptions{Force: true}); err != nil {
+			return fmt.Errorf("remove workspace keeper: %w", err)
+		}
+		w.keeper = ""
+	}
 	if _, err := w.sb.cli.VolumeRemove(ctx, w.volume, client.VolumeRemoveOptions{Force: true}); err != nil {
 		return fmt.Errorf("remove workspace volume %s: %w", w.volume, err)
 	}
@@ -215,13 +241,16 @@ type Result struct {
 // Run запускает команду в новом контейнере рабочего пространства и ждёт завершения.
 // Ошибка возвращается только при сбое самой песочницы; поведение программы
 // (код возврата, превышения) описывает Result.
-func (w *Workspace) Run(ctx context.Context, spec RunSpec) (Result, error) {
+func (w *Workspace) Run(ctx context.Context, spec RunSpec) (result Result, runErr error) {
 	if spec.TimeLimit <= 0 || spec.MemoryBytes <= 0 {
 		return Result{}, errors.New("sandbox: TimeLimit and MemoryBytes are required")
 	}
 	spec = withDefaults(spec)
+	if err := w.keepMounted(ctx, spec.Image); err != nil {
+		return Result{}, err
+	}
 
-	id, err := w.create(ctx, spec)
+	id, err := w.create(ctx, spec, "run")
 	if err != nil {
 		return Result{}, err
 	}
@@ -229,7 +258,9 @@ func (w *Workspace) Run(ctx context.Context, spec RunSpec) (Result, error) {
 	defer func() {
 		rmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
-		_, _ = w.sb.cli.ContainerRemove(rmCtx, id, client.ContainerRemoveOptions{Force: true})
+		if _, err := w.sb.cli.ContainerRemove(rmCtx, id, client.ContainerRemoveOptions{Force: true}); err != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("remove sandbox container: %w", err))
+		}
 	}()
 
 	if err := w.copyPending(ctx, id); err != nil {
@@ -254,7 +285,27 @@ func withDefaults(spec RunSpec) RunSpec {
 	return spec
 }
 
-func (w *Workspace) create(ctx context.Context, spec RunSpec) (string, error) {
+// keepMounted сохраняет tmpfs между компиляцией и тестами: Docker размонтирует
+// local volume после остановки последнего контейнера и иначе потеряет артефакты.
+func (w *Workspace) keepMounted(ctx context.Context, image string) error {
+	if w.keeper != "" {
+		return nil
+	}
+	id, err := w.create(ctx, withDefaults(RunSpec{
+		Image: image, Cmd: []string{"sleep", "2147483647"},
+		TimeLimit: orphanVolumeAge, MemoryBytes: 16 << 20, PidsLimit: 4,
+	}), "workspace")
+	if err != nil {
+		return fmt.Errorf("create workspace keeper: %w", err)
+	}
+	w.keeper = id
+	if _, err := w.sb.cli.ContainerStart(ctx, id, client.ContainerStartOptions{}); err != nil {
+		return fmt.Errorf("start workspace keeper: %w", err)
+	}
+	return nil
+}
+
+func (w *Workspace) create(ctx context.Context, spec RunSpec, label string) (string, error) {
 	init := true
 	resp, err := w.sb.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: &container.Config{
@@ -269,14 +320,24 @@ func (w *Workspace) create(ctx context.Context, spec RunSpec) (string, error) {
 			OpenStdin:       true,
 			StdinOnce:       true,
 			NetworkDisabled: true,
-			Labels:          map[string]string{labelKey: "run"},
+			Labels:          map[string]string{labelKey: label},
 		},
 		HostConfig: &container.HostConfig{
 			NetworkMode:    "none",
 			ReadonlyRootfs: true,
 			CapDrop:        []string{"ALL"},
-			SecurityOpt:    []string{"no-new-privileges"},
-			Runtime:        w.sb.runtime,
+			SecurityOpt:    []string{"no-new-privileges", "seccomp=" + seccompProfile},
+			// Явный список заменяет defaults Docker: сохраняем proc-маски, а весь
+			// CPU sysfs закрываем вместе с thermal_throttle независимо от числа CPU хоста.
+			MaskedPaths: []string{
+				"/proc/asound", "/proc/acpi", "/proc/interrupts", "/proc/kcore",
+				"/proc/keys", "/proc/latency_stats", "/proc/timer_list", "/proc/timer_stats",
+				"/proc/sched_debug", "/proc/scsi", "/proc/1/environ",
+				"/sys/firmware", "/sys/devices/virtual/powercap", "/sys/devices/system/cpu",
+			},
+			// Поток attach уже ограничен воркером; вторая копия в логах Docker не нужна.
+			LogConfig: container.LogConfig{Type: "none"},
+			Runtime:   w.sb.runtime,
 			// init (tini) собирает зомби и пробрасывает сигналы: программа не PID 1.
 			Init:  &init,
 			Tmpfs: map[string]string{"/tmp": "rw,nosuid,nodev,size=16m"},

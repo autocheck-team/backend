@@ -53,11 +53,12 @@ func (f *fakeObjects) Put(_ context.Context, key string, reader io.Reader, _ int
 }
 
 type fakeWorkspace struct {
-	files   map[string][]byte
-	specs   []sandbox.RunSpec
-	results []sandbox.Result
-	err     error
-	closed  bool
+	files    map[string][]byte
+	specs    []sandbox.RunSpec
+	results  []sandbox.Result
+	err      error
+	closeErr error
+	closed   bool
 }
 
 func (f *fakeWorkspace) AddFile(name string, data []byte, _ int64) { f.files[name] = bytes.Clone(data) }
@@ -74,7 +75,36 @@ func (f *fakeWorkspace) Run(_ context.Context, spec sandbox.RunSpec) (sandbox.Re
 	f.results = f.results[1:]
 	return res, nil
 }
-func (f *fakeWorkspace) Close(context.Context) error { f.closed = true; return nil }
+func (f *fakeWorkspace) Close(context.Context) error { f.closed = true; return f.closeErr }
+
+func TestRunnerCleanupFailure(t *testing.T) {
+	for _, custom := range []bool{false, true} {
+		t.Run(strconv.FormatBool(custom), func(t *testing.T) {
+			// arrange
+			repo, objects, ws, sb := runnerFixture(sandbox.Result{Stdout: []byte("5")})
+			repo.task.Tests = repo.task.Tests[:1]
+			cleanupErr := errors.New("unable to remove workspace")
+			ws.closeErr = cleanupErr
+			if custom {
+				ws.closeErr = nil
+				key := "checker"
+				repo.task.Problem.Checker, repo.task.Problem.CheckerKey = "custom", &key
+				objects.data[key] = []byte("checker")
+				sb.workspaces = append(sb.workspaces, &fakeWorkspace{
+					files: map[string][]byte{}, results: []sandbox.Result{{}}, closeErr: cleanupErr,
+				})
+			}
+
+			// act
+			_, err := NewRunner(repo, objects, sb).Run(t.Context(), Job{})
+
+			// assert
+			if !errors.Is(err, cleanupErr) || !ws.closed {
+				t.Fatalf("cleanup error=%v solution closed=%t", err, ws.closed)
+			}
+		})
+	}
+}
 
 type fakeSandbox struct {
 	workspaces []*fakeWorkspace

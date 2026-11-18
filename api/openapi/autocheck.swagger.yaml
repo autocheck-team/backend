@@ -6,6 +6,10 @@ info:
 tags:
   - name: UserService
     description: UserService — профиль текущего пользователя.
+  - name: BillingService
+    description: BillingService управляет оплатой доступа и показывает доступные квоты.
+  - name: FeedbackService
+    description: FeedbackService — запросы пользователей об изменениях платформы.
   - name: ProblemService
     description: ProblemService — задания, тест-кейсы и языки программирования.
   - name: SubmissionService
@@ -15,6 +19,162 @@ consumes:
 produces:
   - application/json
 paths:
+  /v1/billing/yookassa/webhook:
+    post:
+      summary: YookassaWebhook принимает уведомление без JWT и проверяет платёж через API провайдера.
+      operationId: BillingService_YookassaWebhook
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1YookassaWebhookResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: YookassaWebhookRequest использует только идентификатор, остальные поля недоверенные.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1YookassaWebhookRequest'
+      tags:
+        - BillingService
+      security: []
+  /v1/feedback-requests:
+    get:
+      summary: ListFeedbackRequests возвращает свои запросы, для администратора — все, новые первыми.
+      operationId: FeedbackService_ListFeedbackRequests
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListFeedbackRequestsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: status
+          description: |-
+            Статус; UNSPECIFIED означает любой.
+
+             - FEEDBACK_REQUEST_STATUS_UNSPECIFIED: Статус не указан; допустим только как отсутствие фильтра списка.
+             - FEEDBACK_REQUEST_STATUS_NEW: Ожидает рассмотрения.
+             - FEEDBACK_REQUEST_STATUS_ACCEPTED: Принят в работу.
+             - FEEDBACK_REQUEST_STATUS_REJECTED: Отклонён; конечный статус.
+             - FEEDBACK_REQUEST_STATUS_COMPLETED: Выполнен; конечный статус.
+          in: query
+          required: false
+          type: string
+          enum:
+            - FEEDBACK_REQUEST_STATUS_UNSPECIFIED
+            - FEEDBACK_REQUEST_STATUS_NEW
+            - FEEDBACK_REQUEST_STATUS_ACCEPTED
+            - FEEDBACK_REQUEST_STATUS_REJECTED
+            - FEEDBACK_REQUEST_STATUS_COMPLETED
+          default: FEEDBACK_REQUEST_STATUS_UNSPECIFIED
+        - name: type
+          description: |-
+            Тип; UNSPECIFIED означает любой.
+
+             - FEEDBACK_REQUEST_TYPE_UNSPECIFIED: Тип не указан; допустим только как отсутствие фильтра списка.
+             - FEEDBACK_REQUEST_TYPE_COMPILER_UPDATE: Обновление компилятора или версии языка.
+             - FEEDBACK_REQUEST_TYPE_NEW_LIBRARY: Добавление библиотеки.
+             - FEEDBACK_REQUEST_TYPE_OTHER: Остальные предложения.
+          in: query
+          required: false
+          type: string
+          enum:
+            - FEEDBACK_REQUEST_TYPE_UNSPECIFIED
+            - FEEDBACK_REQUEST_TYPE_COMPILER_UPDATE
+            - FEEDBACK_REQUEST_TYPE_NEW_LIBRARY
+            - FEEDBACK_REQUEST_TYPE_OTHER
+          default: FEEDBACK_REQUEST_TYPE_UNSPECIFIED
+        - name: pageSize
+          description: Размер страницы; 0 означает 20, максимум 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Непрозрачный токен следующей страницы; пусто для первой.
+          in: query
+          required: false
+          type: string
+      tags:
+        - FeedbackService
+    post:
+      summary: CreateFeedbackRequest создаёт запрос от имени вошедшего пользователя.
+      operationId: FeedbackService_CreateFeedbackRequest
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateFeedbackRequestResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: CreateFeedbackRequestRequest — создание запроса.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1CreateFeedbackRequestRequest'
+      tags:
+        - FeedbackService
+  /v1/feedback-requests/{id}:
+    get:
+      summary: GetFeedbackRequest возвращает свой запрос или любой для администратора.
+      operationId: FeedbackService_GetFeedbackRequest
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetFeedbackRequestResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Идентификатор (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - FeedbackService
+    patch:
+      summary: |-
+        UpdateFeedbackRequest меняет статус и комментарий; доступен только администратору.
+        Новый запрос можно принять или отклонить, принятый — выполнить или отклонить.
+        Повтор текущего статуса позволяет исправить комментарий, включая его очистку.
+      operationId: FeedbackService_UpdateFeedbackRequest
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1UpdateFeedbackRequestResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Идентификатор (UUID).
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/FeedbackServiceUpdateFeedbackRequestBody'
+      tags:
+        - FeedbackService
   /v1/languages:
     get:
       summary: ListLanguages возвращает доступные языки программирования.
@@ -47,6 +207,49 @@ paths:
             $ref: '#/definitions/rpcStatus'
       tags:
         - UserService
+  /v1/payments/me:
+    get:
+      summary: ListMyPayments возвращает платежи только текущего пользователя.
+      operationId: BillingService_ListMyPayments
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListMyPaymentsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: pageSize
+          description: Размер страницы, по умолчанию 20, максимум 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Непрозрачный токен предыдущей страницы.
+          in: query
+          required: false
+          type: string
+      tags:
+        - BillingService
+  /v1/plans:
+    get:
+      summary: ListPlans возвращает публичный каталог тарифов.
+      operationId: BillingService_ListPlans
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListPlansResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      tags:
+        - BillingService
+      security: []
   /v1/problems:
     get:
       summary: |-
@@ -485,6 +688,29 @@ paths:
           type: string
       tags:
         - SubmissionService
+  /v1/submissions/{id}/report:
+    get:
+      summary: |-
+        GetSubmissionReport возвращает отчёт; данные закрытых тестов не раскрываются.
+        Права совпадают с GetSubmission.
+      operationId: SubmissionService_GetSubmissionReport
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetSubmissionReportResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Посылка (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - SubmissionService
   /v1/submissions/{id}/source:
     get:
       summary: GetSubmissionSource возвращает исходный код посылки.
@@ -506,7 +732,83 @@ paths:
           type: string
       tags:
         - SubmissionService
+  /v1/submissions/{id}:watch:
+    get:
+      summary: |-
+        WatchSubmission сразу возвращает состояние и затем изменения до done/failed.
+        Права совпадают с GetSubmission; через 10 минут требуется новое подключение.
+      operationId: SubmissionService_WatchSubmission
+      responses:
+        "200":
+          description: A successful response.(streaming responses)
+          schema:
+            type: object
+            properties:
+              result:
+                $ref: '#/definitions/v1WatchSubmissionResponse'
+              error:
+                $ref: '#/definitions/rpcStatus'
+            title: Stream result of v1WatchSubmissionResponse
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Посылка (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - SubmissionService
+  /v1/subscriptions/me:
+    get:
+      summary: GetMySubscription возвращает эффективный тариф и остатки текущего месяца UTC.
+      operationId: BillingService_GetMySubscription
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetMySubscriptionResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      tags:
+        - BillingService
+  /v1/subscriptions:checkout:
+    post:
+      summary: CheckoutSubscription создаёт оплату; повтор с тем же ключом возвращает тот же платёж.
+      operationId: BillingService_CheckoutSubscription
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CheckoutSubscriptionResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: CheckoutSubscriptionRequest фиксирует намерение оплаты, чтобы повтор не списал деньги дважды.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1CheckoutSubscriptionRequest'
+      tags:
+        - BillingService
 definitions:
+  FeedbackServiceUpdateFeedbackRequestBody:
+    type: object
+    properties:
+      status:
+        $ref: '#/definitions/v1FeedbackRequestStatus'
+        description: Новый статус; обязателен, переход проверяется сервисом.
+      adminComment:
+        type: string
+        description: Комментарий до 5000 символов; пустое значение очищает комментарий.
+    description: UpdateFeedbackRequestRequest — полная замена статуса и комментария администратором.
   ProblemServiceConfirmCheckerBody:
     type: object
     description: ConfirmCheckerRequest — подтверждение загрузки чекера.
@@ -575,6 +877,29 @@ definitions:
        - CHECKER_TOKENS: Совпадение последовательности токенов, разделённых пробельными символами.
        - CHECKER_FLOAT: Как TOKENS, но числа сравниваются с погрешностью float_epsilon.
        - CHECKER_CUSTOM: Собственный Python-чекер автора задания.
+  v1CheckoutSubscriptionRequest:
+    type: object
+    properties:
+      planCode:
+        type: string
+        description: Код платного тарифа.
+      returnUrl:
+        type: string
+        description: Абсолютный HTTP(S) адрес возврата после оплаты.
+      requestId:
+        type: string
+        description: UUID запроса, повторять при сетевых ошибках.
+    description: CheckoutSubscriptionRequest фиксирует намерение оплаты, чтобы повтор не списал деньги дважды.
+  v1CheckoutSubscriptionResponse:
+    type: object
+    properties:
+      payment:
+        $ref: '#/definitions/v1Payment'
+        description: Локальная запись оплаты.
+      confirmationUrl:
+        type: string
+        description: Адрес ЮKassa для редиректа; пусто у завершённого платежа.
+    description: CheckoutSubscriptionResponse содержит адрес страницы подтверждения оплаты.
   v1ConfirmCheckerResponse:
     type: object
     description: ConfirmCheckerResponse — чекер загружен.
@@ -584,6 +909,34 @@ definitions:
       testCase:
         $ref: '#/definitions/v1TestCase'
     description: ConfirmTestCaseResponse — подтверждённый тест.
+  v1CreateFeedbackRequestRequest:
+    type: object
+    properties:
+      type:
+        $ref: '#/definitions/v1FeedbackRequestType'
+        description: Предмет запроса; обязателен.
+      languageId:
+        type: string
+        description: Существующий язык, включая выключенный; отсутствие означает запрос без привязки.
+      title:
+        type: string
+        description: Заголовок, от 1 до 200 символов; не может состоять только из пробелов.
+      text:
+        type: string
+        description: Текст, от 1 до 10000 символов; не может состоять только из пробелов.
+      clientRequestId:
+        type: string
+        description: |-
+          Необязательный ключ идемпотентности (UUID), уникальный в пределах автора.
+          Повтор возвращает первоначальный запрос, даже если содержимое изменилось.
+    description: CreateFeedbackRequestRequest — создание запроса.
+  v1CreateFeedbackRequestResponse:
+    type: object
+    properties:
+      feedbackRequest:
+        $ref: '#/definitions/v1FeedbackRequest'
+        description: Сохранённый запрос.
+    description: CreateFeedbackRequestResponse — созданный или ранее созданный запрос.
   v1CreateProblemResponse:
     type: object
     properties:
@@ -618,6 +971,74 @@ definitions:
   v1DeleteTestCaseResponse:
     type: object
     description: DeleteTestCaseResponse — ответ на удаление теста.
+  v1FeedbackRequest:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор запроса (UUID).
+      userId:
+        type: string
+        description: Автор запроса (UUID).
+      type:
+        $ref: '#/definitions/v1FeedbackRequestType'
+        description: Предмет запроса.
+      languageId:
+        type: string
+        description: Связанный язык; пусто, если запрос не привязан к языку.
+      title:
+        type: string
+        description: Заголовок, от 1 до 200 символов.
+      text:
+        type: string
+        description: Текст, от 1 до 10000 символов.
+      status:
+        $ref: '#/definitions/v1FeedbackRequestStatus'
+        description: Текущее состояние рассмотрения.
+      adminComment:
+        type: string
+        description: Комментарий администратора, до 5000 символов; пусто, если комментария нет.
+      createTime:
+        type: string
+        format: date-time
+        description: Время создания.
+      updateTime:
+        type: string
+        format: date-time
+        description: Время последнего изменения.
+    description: FeedbackRequest — запрос пользователя об изменениях платформы.
+  v1FeedbackRequestStatus:
+    type: string
+    enum:
+      - FEEDBACK_REQUEST_STATUS_UNSPECIFIED
+      - FEEDBACK_REQUEST_STATUS_NEW
+      - FEEDBACK_REQUEST_STATUS_ACCEPTED
+      - FEEDBACK_REQUEST_STATUS_REJECTED
+      - FEEDBACK_REQUEST_STATUS_COMPLETED
+    default: FEEDBACK_REQUEST_STATUS_UNSPECIFIED
+    description: |-
+      FeedbackRequestStatus — состояние рассмотрения запроса.
+
+       - FEEDBACK_REQUEST_STATUS_UNSPECIFIED: Статус не указан; допустим только как отсутствие фильтра списка.
+       - FEEDBACK_REQUEST_STATUS_NEW: Ожидает рассмотрения.
+       - FEEDBACK_REQUEST_STATUS_ACCEPTED: Принят в работу.
+       - FEEDBACK_REQUEST_STATUS_REJECTED: Отклонён; конечный статус.
+       - FEEDBACK_REQUEST_STATUS_COMPLETED: Выполнен; конечный статус.
+  v1FeedbackRequestType:
+    type: string
+    enum:
+      - FEEDBACK_REQUEST_TYPE_UNSPECIFIED
+      - FEEDBACK_REQUEST_TYPE_COMPILER_UPDATE
+      - FEEDBACK_REQUEST_TYPE_NEW_LIBRARY
+      - FEEDBACK_REQUEST_TYPE_OTHER
+    default: FEEDBACK_REQUEST_TYPE_UNSPECIFIED
+    description: |-
+      FeedbackRequestType — предмет запроса.
+
+       - FEEDBACK_REQUEST_TYPE_UNSPECIFIED: Тип не указан; допустим только как отсутствие фильтра списка.
+       - FEEDBACK_REQUEST_TYPE_COMPILER_UPDATE: Обновление компилятора или версии языка.
+       - FEEDBACK_REQUEST_TYPE_NEW_LIBRARY: Добавление библиотеки.
+       - FEEDBACK_REQUEST_TYPE_OTHER: Остальные предложения.
   v1GetCheckerUploadResponse:
     type: object
     properties:
@@ -627,18 +1048,88 @@ definitions:
         type: string
         format: date-time
     description: GetCheckerUploadResponse — ссылка для HTTP PUT.
+  v1GetFeedbackRequestResponse:
+    type: object
+    properties:
+      feedbackRequest:
+        $ref: '#/definitions/v1FeedbackRequest'
+        description: Запрос пользователя.
+    description: GetFeedbackRequestResponse — доступный пользователю запрос.
   v1GetMeResponse:
     type: object
     properties:
       user:
         $ref: '#/definitions/v1User'
     description: GetMeResponse — профиль текущего пользователя.
+  v1GetMySubscriptionResponse:
+    type: object
+    properties:
+      plan:
+        $ref: '#/definitions/v1Plan'
+        description: Эффективный тариф.
+      status:
+        type: string
+        description: active, expired или free, если оплаты ещё не было.
+      startTime:
+        type: string
+        format: date-time
+        description: Начало оплаченного доступа, отсутствует без подписки.
+      endTime:
+        type: string
+        format: date-time
+        description: Конец оплаченного доступа, отсутствует без подписки.
+      testRunsUsed:
+        type: string
+        format: int64
+        description: Число сохранённых прогонов за текущий месяц UTC.
+      testRunsRemaining:
+        type: string
+        format: int64
+        description: Остаток за вычетом прогонов и резерва очереди; -1 — без ограничения.
+      compilationsRemaining:
+        type: string
+        format: int64
+        description: Остаток компиляций в текущем окне; -1 — без ограничения.
+      compilationRetryAfterSeconds:
+        type: string
+        format: int64
+        description: Число секунд до следующей доступной компиляции; ноль — уже доступна.
+      checkoutEnabled:
+        type: boolean
+        description: Доступно ли оформление оплаты в этом окружении.
+    description: GetMySubscriptionResponse показывает эффективный тариф; после истечения действует free.
   v1GetProblemResponse:
     type: object
     properties:
       problem:
         $ref: '#/definitions/v1Problem'
     description: GetProblemResponse — задание.
+  v1GetSubmissionReportResponse:
+    type: object
+    properties:
+      languageId:
+        type: string
+        description: Идентификатор языка решения.
+      status:
+        $ref: '#/definitions/v1SubmissionStatus'
+        description: Текущий этап проверки.
+      verdict:
+        $ref: '#/definitions/v1Verdict'
+        description: Итоговый вердикт; UNSPECIFIED до завершения.
+      score:
+        type: integer
+        format: int32
+        description: Набранные баллы; отсутствуют до расчёта.
+      compileLog:
+        type: string
+        description: Лог компиляции только при CE, до 64 КиБ.
+      testRuns:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1SubmissionTestReport'
+        description: Выполненные тесты в порядке ordinal.
+    description: GetSubmissionReportResponse — отчёт, до завершения проверки может быть неполным.
   v1GetSubmissionResponse:
     type: object
     properties:
@@ -675,6 +1166,19 @@ definitions:
         type: string
         description: Название для интерфейса, например "Go 1.27".
     description: Language — язык программирования и его тулчейн.
+  v1ListFeedbackRequestsResponse:
+    type: object
+    properties:
+      feedbackRequests:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1FeedbackRequest'
+        description: Запросы, новые первыми.
+      nextPageToken:
+        type: string
+        description: Токен следующей страницы; пусто для последней.
+    description: ListFeedbackRequestsResponse — страница запросов.
   v1ListLanguagesResponse:
     type: object
     properties:
@@ -684,6 +1188,29 @@ definitions:
           type: object
           $ref: '#/definitions/v1Language'
     description: ListLanguagesResponse — доступные языки.
+  v1ListMyPaymentsResponse:
+    type: object
+    properties:
+      payments:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1Payment'
+        description: Платежи текущего пользователя.
+      nextPageToken:
+        type: string
+        description: Пусто на последней странице.
+    description: ListMyPaymentsResponse возвращает страницу от новых платежей к старым.
+  v1ListPlansResponse:
+    type: object
+    properties:
+      plans:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1Plan'
+        description: Каталог тарифов.
+    description: ListPlansResponse содержит доступные тарифы.
   v1ListProblemsResponse:
     type: object
     properties:
@@ -717,6 +1244,57 @@ definitions:
           type: object
           $ref: '#/definitions/v1TestCase'
     description: ListTestCasesResponse — тесты задания по порядку.
+  v1Payment:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Наш UUID платежа.
+      planCode:
+        type: string
+        description: Код купленного тарифа.
+      amountKopecks:
+        type: string
+        format: int64
+        description: Зафиксированная при оформлении сумма в копейках.
+      status:
+        type: string
+        description: pending, succeeded или canceled.
+      createTime:
+        type: string
+        format: date-time
+        description: Момент создания записи.
+    description: Payment не содержит ключей доступа или платёжных реквизитов.
+  v1Plan:
+    type: object
+    properties:
+      code:
+        type: string
+        description: Стабильный код тарифа.
+      name:
+        type: string
+        description: Название для пользователя.
+      amountKopecks:
+        type: string
+        format: int64
+        description: Цена в копейках.
+      periodDays:
+        type: integer
+        format: int32
+        description: Продолжительность оплаченного периода в днях.
+      compilationLimit:
+        type: integer
+        format: int32
+        description: Число компиляций в скользящем окне; ноль — без ограничения.
+      compilationWindowSeconds:
+        type: integer
+        format: int32
+        description: Длительность скользящего окна в секундах.
+      monthlyTestRunLimit:
+        type: integer
+        format: int32
+        description: Число прогонов за календарный месяц UTC; ноль — без ограничения.
+    description: Plan содержит цену в копейках и ограничения, ноль лимита означает отсутствие ограничения.
   v1Problem:
     type: object
     properties:
@@ -782,6 +1360,16 @@ definitions:
         description: Время последнего изменения.
         readOnly: true
     description: Problem — задание.
+  v1ReportText:
+    type: object
+    properties:
+      text:
+        type: string
+        description: До 4096 байт UTF-8; невалидные последовательности заменяются на U+FFFD.
+      isTruncated:
+        type: boolean
+        description: Исходный объект не поместился полностью.
+    description: ReportText — текстовый префикс объекта с ограничением объёма.
   v1Role:
     type: string
     enum:
@@ -867,6 +1455,52 @@ definitions:
        - SUBMISSION_STATUS_RUNNING: Выполняются тесты.
        - SUBMISSION_STATUS_DONE: Проверка завершена, вердикт известен.
        - SUBMISSION_STATUS_FAILED: Сбой проверяющей системы (вердикт SE), посылку можно перепроверить.
+  v1SubmissionTestReport:
+    type: object
+    properties:
+      ordinal:
+        type: integer
+        format: int32
+        description: Порядковый номер теста.
+      isSample:
+        type: boolean
+        description: Признак открытого теста.
+      verdict:
+        $ref: '#/definitions/v1Verdict'
+        description: Вердикт теста.
+      timeMs:
+        type: integer
+        format: int32
+        description: Время выполнения, миллисекунды.
+      memoryKb:
+        type: integer
+        format: int32
+        description: Пик памяти, килобайты.
+      cpuTimeMs:
+        type: integer
+        format: int32
+        description: Приблизительное CPU-время, миллисекунды.
+      isTimeLimitExceeded:
+        type: boolean
+        description: Превышено время (TL).
+      isMemoryLimitExceeded:
+        type: boolean
+        description: Превышена память (ML).
+      input:
+        $ref: '#/definitions/v1ReportText'
+        description: Вход только открытого теста с WA; иначе отсутствует.
+      expectedOutput:
+        $ref: '#/definitions/v1ReportText'
+        description: Эталон только открытого теста с WA; иначе отсутствует.
+      actualOutput:
+        $ref: '#/definitions/v1ReportText'
+        description: Фактический вывод только открытого теста с WA; отсутствует у старых прогонов без stdout.
+      diff:
+        type: string
+        description: |-
+          Построчный diff показанных префиксов: пробел = совпадение, минус = эталон, плюс = вывод.
+          Сохраняет CR и различие завершающего LF; пусто без сохранённого stdout.
+    description: SubmissionTestReport — результат и безопасные пояснения по тесту.
   v1TestCase:
     type: object
     properties:
@@ -937,6 +1571,13 @@ definitions:
         type: string
         description: Хвост stderr только открытого теста.
     description: TestRun — результат посылки на одном тесте.
+  v1UpdateFeedbackRequestResponse:
+    type: object
+    properties:
+      feedbackRequest:
+        $ref: '#/definitions/v1FeedbackRequest'
+        description: Состояние после изменения.
+    description: UpdateFeedbackRequestResponse — изменённый запрос.
   v1UpdateProblemResponse:
     type: object
     properties:
@@ -983,6 +1624,36 @@ definitions:
        - VERDICT_MEMORY_LIMIT_EXCEEDED: Превышено ограничение памяти.
        - VERDICT_RUNTIME_ERROR: Ошибка выполнения (ненулевой код возврата, падение).
        - VERDICT_SYSTEM_ERROR: Сбой проверяющей системы, не вина решения.
+  v1WatchSubmissionResponse:
+    type: object
+    properties:
+      submission:
+        $ref: '#/definitions/v1Submission'
+        description: Состояние посылки на момент чтения БД.
+    description: WatchSubmissionResponse — актуальное состояние, а не журнал переходов.
+  v1YookassaWebhookObject:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор платежа ЮKassa.
+    description: YookassaWebhookObject выделяет только идентификатор из объекта провайдера.
+  v1YookassaWebhookRequest:
+    type: object
+    properties:
+      type:
+        type: string
+        description: Тип уведомления провайдера.
+      event:
+        type: string
+        description: Имя события; не служит доказательством оплаты.
+      object:
+        $ref: '#/definitions/v1YookassaWebhookObject'
+        description: Минимальное представление объекта оплаты.
+    description: YookassaWebhookRequest использует только идентификатор, остальные поля недоверенные.
+  v1YookassaWebhookResponse:
+    type: object
+    description: YookassaWebhookResponse подтверждает обработку уведомления.
 securityDefinitions:
   bearer:
     type: apiKey

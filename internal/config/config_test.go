@@ -12,6 +12,9 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
+	if c.YookassaAPIURL != "https://api.yookassa.ru/v3" || c.YookassaTimeout != 10*time.Second || c.BillingSyncInterval != 30*time.Second {
+		t.Fatalf("unexpected billing defaults")
+	}
 	if c.HTTPAddr != ":8080" {
 		t.Errorf("HTTPAddr = %q, want :8080", c.HTTPAddr)
 	}
@@ -30,7 +33,13 @@ func TestLoadErrors(t *testing.T) {
 	}{
 		{"missing database url", map[string]string{"DATABASE_URL": ""}},
 		{"bad shutdown timeout", map[string]string{"DATABASE_URL": "x", "SHUTDOWN_TIMEOUT": "soon"}},
+		{"bad yookassa timeout", map[string]string{"DATABASE_URL": "x", "YOOKASSA_TIMEOUT": "no"}},
+		{"zero yookassa timeout", map[string]string{"DATABASE_URL": "x", "YOOKASSA_TIMEOUT": "0s"}},
+		{"bad billing interval", map[string]string{"DATABASE_URL": "x", "BILLING_SYNC_INTERVAL": "0s"}},
 		{"bad concurrency", map[string]string{"DATABASE_URL": "x", "WORKER_CONCURRENCY": "0"}},
+		{"bad_feedback_timeout", map[string]string{"DATABASE_URL": "x", "FEEDBACK_QUERY_TIMEOUT": "soon"}},
+		{"zero_feedback_timeout", map[string]string{"DATABASE_URL": "x", "FEEDBACK_QUERY_TIMEOUT": "0s"}},
+		{"negative_feedback_timeout", map[string]string{"DATABASE_URL": "x", "FEEDBACK_QUERY_TIMEOUT": "-1s"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

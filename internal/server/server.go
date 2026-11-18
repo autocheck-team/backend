@@ -40,6 +40,8 @@ type Services struct {
 	User       v1.UserServiceServer
 	Problem    v1.ProblemServiceServer
 	Submission v1.SubmissionServiceServer
+	Feedback   v1.FeedbackServiceServer
+	Billing    v1.BillingServiceServer
 }
 
 // Server — gRPC-сервер и HTTP-шлюз.
@@ -69,12 +71,18 @@ func New(
 		),
 		grpc.ChainStreamInterceptor(
 			recovery.StreamServerInterceptor(recoveryOpt),
+			errorsStream(log),
 			authn.Stream(),
+			protovalidatemw.StreamServerInterceptor(validator),
 		),
 	)
 	v1.RegisterUserServiceServer(g, svc.User)
 	v1.RegisterProblemServiceServer(g, svc.Problem)
 	v1.RegisterSubmissionServiceServer(g, svc.Submission)
+	v1.RegisterFeedbackServiceServer(g, svc.Feedback)
+	if svc.Billing != nil {
+		v1.RegisterBillingServiceServer(g, svc.Billing)
+	}
 
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(g, hs)
@@ -85,6 +93,8 @@ func New(
 
 // PublicMethods — gRPC-методы, доступные без токена.
 var PublicMethods = []string{
+	v1.BillingService_ListPlans_FullMethodName,
+	v1.BillingService_YookassaWebhook_FullMethodName,
 	healthpb.Health_Check_FullMethodName,
 	healthpb.Health_Watch_FullMethodName,
 	healthpb.Health_List_FullMethodName,
@@ -112,6 +122,8 @@ func (s *Server) Run(ctx context.Context) error {
 		v1.RegisterUserServiceHandler,
 		v1.RegisterProblemServiceHandler,
 		v1.RegisterSubmissionServiceHandler,
+		v1.RegisterFeedbackServiceHandler,
+		v1.RegisterBillingServiceHandler,
 	} {
 		if err := register(ctx, gw, conn); err != nil {
 			return fmt.Errorf("register gateway: %w", err)
@@ -141,7 +153,20 @@ func (s *Server) Run(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.cfg.ShutdownTimeout)
 		defer cancel()
 		err := httpSrv.Shutdown(shutdownCtx)
+		// Длинные подписки не должны задерживать SIGTERM на десять минут.
+		stopped := make(chan struct{})
+		forceDone := make(chan struct{})
+		go func() {
+			defer close(forceDone)
+			select {
+			case <-shutdownCtx.Done():
+				s.grpc.Stop()
+			case <-stopped:
+			}
+		}()
 		s.grpc.GracefulStop()
+		close(stopped)
+		<-forceDone
 		return err
 	})
 	return eg.Wait()
@@ -169,6 +194,24 @@ func errorsUnary(log *slog.Logger) grpc.UnaryServerInterceptor {
 		}
 		log.ErrorContext(ctx, "rpc failed", "method", info.FullMethod, "err", err)
 		return nil, status.Error(codes.Internal, "внутренняя ошибка сервера")
+	}
+}
+
+// errorsStream защищает поток от утечки внутренних ошибок так же, как unary-вызовы.
+func errorsStream(log *slog.Logger) grpc.StreamServerInterceptor {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		err := handler(srv, stream)
+		if err == nil {
+			return nil
+		}
+		if stream.Context().Err() != nil {
+			return status.FromContextError(stream.Context().Err()).Err()
+		}
+		if _, ok := status.FromError(err); ok {
+			return err
+		}
+		log.ErrorContext(stream.Context(), "stream failed", "method", info.FullMethod, "err", err)
+		return status.Error(codes.Internal, "внутренняя ошибка сервера")
 	}
 }
 

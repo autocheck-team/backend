@@ -1,6 +1,6 @@
 module github.com/autocheck-team/backend
 
-go 1.27.3
+go 1.27.4
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.1
@@ -18,6 +18,7 @@ require (
 	github.com/pressly/goose/v3 v3.28.0
 	golang.org/x/sync v0.24.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20261012220534-4341edf3f941
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 )
@@ -68,6 +69,5 @@ require (
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
 )

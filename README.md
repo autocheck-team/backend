@@ -19,7 +19,7 @@ pkg/api            сгенерированный Go-код (protobuf, gRPC, gat
 cmd/api            gRPC :9090 + REST-шлюз :8080
 cmd/worker         воркер проверки посылок
 cmd/migrate        миграции БД (up / down)
-internal/          auth (Keycloak JWT), server, user, problem, submission,
+internal/          auth (Keycloak JWT), server, user, problem, submission, feedback, billing,
                    storage (S3), sandbox (Docker), config, db (+ migrations)
 ```
 
@@ -29,13 +29,43 @@ internal/          auth (Keycloak JWT), server, user, problem, submission,
 Шлюз ходит в gRPC-сервер по сети, поэтому REST и gRPC проходят одни и те же интерсепторы:
 авторизация, валидация (protovalidate), перевод внутренних ошибок в `Internal`.
 
-Каждый запрос, кроме health-проверок, требует access-токен Keycloak в заголовке
+Каждый запрос, кроме health-проверок, списка тарифов и вебхука ЮKassa, требует access-токен Keycloak в заголовке
 `Authorization: Bearer <token>`. Бэкенд проверяет подпись по JWKS, `iss` и `aud = autocheck-api`,
 а роли берёт из `realm_access.roles` (`student`, `author`, `admin`). При первом запросе
 пользователь появляется в таблице `users`.
 
 После изменения proto: `make proto-gen` (нужен [buf](https://buf.build/docs/installation)),
 сгенерированный код коммитится вместе с proto. CI проверяет, что он актуален.
+
+### Запросы пользователей (HPRPR-4)
+
+`FeedbackService` принимает предложения об обновлении компилятора/языка
+(`FEEDBACK_REQUEST_TYPE_COMPILER_UPDATE`), новой библиотеке (`FEEDBACK_REQUEST_TYPE_NEW_LIBRARY`)
+и прочих изменениях (`FEEDBACK_REQUEST_TYPE_OTHER`).
+
+- `POST /v1/feedback-requests` — создание любым вошедшим пользователем: `type`, `title`
+  (1–200 символов), `text` (1–10000 символов), необязательный `language_id` из `languages`
+  (включая выключенные языки). Заголовок и текст не могут состоять только из пробелов.
+  Необязательный UUID `client_request_id` работает как у посылок: повтор от того же
+  пользователя возвращает первоначальный результат, даже если содержимое изменилось.
+- `GET /v1/feedback-requests` — свои запросы; для `admin` — все. Фильтры `status` и `type`
+  принимают enum, `UNSPECIFIED` означает отсутствие фильтра. `page_size` по умолчанию 20,
+  максимум 100; `page_token` берётся из `next_page_token`. Порядок — новые первыми;
+  при продолжении списка следует сохранять фильтры.
+- `GET /v1/feedback-requests/{id}` — свой запрос или любой для `admin`.
+  Чужой запрос возвращает 404, в том числе для роли `author`.
+- `PATCH /v1/feedback-requests/{id}` — только `admin`: обязательный `status` и
+  `admin_comment` до 5000 символов. Комментарий заменяется целиком, пустое значение
+  очищает его. Статусы: `NEW → ACCEPTED | REJECTED`, `ACCEPTED → COMPLETED | REJECTED`.
+  Повтор текущего статуса разрешён для исправления комментария; конечные статусы
+  не переоткрываются. Запрещённый переход — 400 (`FailedPrecondition`), конфликт
+  параллельных изменений — 409 (`Aborted`), запрос можно повторить после чтения.
+
+Сервер выставляет автора, начальный статус `NEW`, `create_time` и `update_time`.
+Каждая операция БД ограничена `FEEDBACK_QUERY_TIMEOUT` (по умолчанию `5s`, значение
+должно быть положительным; пример — `configs/.env.example`). Области feedback не
+нужны S3 и воркер. Интеграционные тесты репозитория и REST-шлюза запускаются при
+заданном `DATABASE_URL`; JWT подписывает локальный тестовый издатель с JWKS.
 
 ## Разработка
 
@@ -100,3 +130,149 @@ CPU-время и пик памяти приблизительны: Docker stats
 
 Для ограничения памяти самого воркера он читает файлы тестов размером до 64 МБ
 каждый и скрипты чекеров до 1 МБ. Превышение считается ошибкой данных задания.
+
+Рабочее пространство ограничено 256 МиБ и 16384 inode (tmpfs volume с `nosuid,nodev`),
+один файл — 64 МиБ, `/tmp` — 16 МиБ. Лимит stdout и stderr общий: 16 МиБ;
+превышение даёт RE. Docker не сохраняет дополнительную копию вывода в своих логах.
+Отдельный служебный контейнер удерживает tmpfs между компиляцией и тестами и удаляется
+вместе с workspace. Его лимиты — 16 МиБ и 4 процесса; файлы tmpfs также расходуют RAM хоста.
+Песочница использует встроенный профиль seccomp на основе Moby с запретом ptrace и
+`process_vm_*`; `/proc/1/environ` маскируется. Обновление профиля требует повторного
+прогона поддерживаемых языков и проверок безопасности.
+
+`make test-sandbox-security` проверяет атаки на настоящем Docker через тот же Runner,
+что использует воркер. Цель требует доступный Engine; отдельные Go-тесты, как и другие
+Docker-тесты проекта, пропускаются без Docker. БД, S3 и Keycloak для этой матрицы не нужны.
+Сценарии, наблюдения и границы проверки: [безопасность песочницы](docs/sandbox-security.md).
+
+## Статус посылки без поллинга
+
+`GET /v1/submissions/{id}:watch` (`WatchSubmission`, server streaming) сразу отдаёт
+текущее состояние, затем изменения и закрывает поток после `done` или `failed`.
+Права совпадают с `GetSubmission`: владелец посылки, автор задания, администратор.
+Воркер публикует `pg_notify('submission_events', id)` в транзакции результата.
+Каждый API держит одно отдельное LISTEN-соединение, переподключается при обрыве
+и перечитывает БД по сигналу. Это поток актуальных снимков, а не журнал всех переходов:
+несколько быстрых изменений могут объединиться в последнее состояние.
+
+Максимальная длительность подписки — 10 минут, затем приходит `DeadlineExceeded`
+и фронт может подключиться заново. Внутренняя сверка с БД каждые 30 секунд
+страхует пропущенный сигнал, в том числе при обрыве соединения. Неизменившиеся
+снимки не отправляются. JSON-heartbeat не нужен: gateway сразу flush-ит сообщения,
+HTTP-сервер не ограничивает время записи потока. У внешнего reverse proxy нужно
+отключить буферизацию и установить idle timeout больше 10 минут.
+
+Gateway возвращает newline-delimited JSON: `{"result":{"submission":...}}`.
+Ошибка после начала потока приходит отдельной строкой с `error` (HTTP-код уже не меняется).
+Для заголовка Authorization используется `fetch`:
+
+```js
+async function watchSubmission(id, token, onSubmission, signal) {
+  const response = await fetch(`/v1/submissions/${encodeURIComponent(id)}:watch`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal, // AbortController отменяет подписку при уходе со страницы.
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let pending = "";
+  function consume(line) {
+    if (!line.trim()) return;
+    const message = JSON.parse(line);
+    if (message.error) throw new Error(message.error.message);
+    onSubmission(message.result.submission);
+  }
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += value;
+      let end;
+      while ((end = pending.indexOf("\n")) !== -1) {
+        consume(pending.slice(0, end));
+        pending = pending.slice(end + 1);
+      }
+    }
+    consume(pending);
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
+  }
+}
+```
+
+При сетевой ошибке или `DeadlineExceeded` фронт переподключается с задержкой:
+первый снимок восстановит состояние. После финального статуса подписку повторять
+не нужно. Просроченный access-токен перед новым подключением обновляется.
+
+## Отчёт по посылке
+
+`GET /v1/submissions/{id}/report` (`GetSubmissionReport`) возвращает JSON с `languageId`,
+`status`, `verdict`, `score`, `compileLog` (только CE) и `testRuns` по ordinal.
+Права совпадают с получением посылки. До конца проверки отчёт может быть неполным.
+У каждого результата есть вердикт, wall/CPU-время в миллисекундах, память в КиБ,
+`isTimeLimitExceeded` (TL) и `isMemoryLimitExceeded` (ML).
+
+Только у открытого теста (`isSample`) с WA появляются `input`, `expectedOutput`,
+`actualOutput`: каждый содержит `text` до 4096 байт UTF-8 и `isTruncated`.
+Невалидный UTF-8 заменяется на U+FFFD. `diff` сравнивает показанные префиксы построчно:
+пробел — совпадение, `-` — строка эталона, `+` — строка решения; отсутствие последнего
+LF отмечается отдельно, CRLF сохраняется. При обрезке это diff префиксов, а не полных файлов.
+Для старого прогона без `stdout_key` фактический вывод и diff отсутствуют.
+Закрытые тесты не раскрывают вход, эталон, stdout или diff даже автору/администратору.
+Отчёт собирается из БД и S3 по запросу; `report_key` для него не используется.
+
+## Тарифы, подписки и оплата
+
+Каталог хранится в `plans`: начальные тарифы `free` (0 ₽, 1 компиляция за 60 секунд,
+100 тестовых прогонов за календарный месяц UTC) и `pro` (299 ₽ за 30 дней, без лимитов).
+При отсутствии активной подписки или после её окончания действует `free`.
+Прогон — запись `test_runs`, месяц определяется по времени прогона, а не создания посылки.
+Компиляция учитывается при приёме посылки с непустым `languages.compile_cmd`, включая CE.
+Очередь резервирует число готовых тестов; если остатка на всё задание недостаточно,
+посылка отклоняется. Завершение посылки освобождает неиспользованный резерв.
+Повтор создания посылки с прежним `client_request_id` не тратит квоту.
+
+REST API (gRPC `BillingService`):
+
+- `GET /v1/plans` — публичный каталог цен и лимитов.
+- `GET /v1/subscriptions/me` — эффективный тариф, статус, срок, использованные прогоны,
+  остатки с учётом очереди и время ожидания компиляции. `-1` означает отсутствие лимита.
+- `POST /v1/subscriptions:checkout` — `{ "plan_code": "pro", "return_url": "https://…",
+  "request_id": "UUID" }`, ответ содержит `payment` и `confirmation_url` для редиректа.
+  При сетевой ошибке повторять **тот же** `request_id` с прежними параметрами.
+- `GET /v1/payments/me?page_size=20&page_token=…` — платежи текущего пользователя,
+  keyset-пагинация через `next_page_token`.
+- `POST /v1/billing/yookassa/webhook` — публичное уведомление ЮKassa. Статус и сумма
+  из тела игнорируются: оплата проверяется через GET API ЮKassa, включая сумму,
+  валюту, локальные метаданные и признак `paid`. Успех активирует/продлевает доступ
+  ровно один раз; переход на `return_url` сам по себе доступа не даёт.
+
+Превышение компиляций возвращает gRPC `ResourceExhausted` / HTTP 429 с `google.rpc.RetryInfo`.
+При исчерпании прогонов возвращается 429 с предложением оформить подписку.
+Проверка квот и постановка в очередь выполняются одной транзакцией под блокировкой
+пользователя, поэтому лимиты работают при нескольких экземплярах API.
+
+Настройки окружения (пример — [configs/.env.example](configs/.env.example)):
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `YOOKASSA_SHOP_ID` | пусто | ID тестового магазина |
+| `YOOKASSA_SECRET_KEY` | пусто | Секретный ключ; не записывать в логи |
+| `YOOKASSA_API_URL` | `https://api.yookassa.ru/v3` | Тестовый магазин использует этот же API |
+| `YOOKASSA_TIMEOUT` | `10s` | Дедлайн каждого обращения к провайдеру |
+| `BILLING_SYNC_INTERVAL` | `30s` | Период фоновой проверки pending-платежей в API |
+
+Без полного набора ключей checkout выключен (`Unavailable` / HTTP 503),
+`checkout_enabled=false`; каталог, подписка и бесплатные квоты продолжают работать.
+Локально и в Codespaces входящий webhook необязателен: API сам сверяет pending-платежи,
+включая потерянный ответ создания. Намерение и ключ идемпотентности сохраняются до POST.
+Неопределённое создание старше 23 часов требует ручной сверки: повтор POST после
+истечения 24-часового срока ключа ЮKassa мог бы создать вторую оплату.
+Это разовые покупки периода, автоматического списания и сохранения карты нет.
+Протокол оплаты: [документация ЮKassa](https://yookassa.ru/developers/payment-acceptance/getting-started/quick-start).
+
+Тесты биллинга используют `httptest` и настоящий PostgreSQL через `DATABASE_URL`.
+`go test -race -count=1 -run TestYookassaLive -v ./internal/billing` дополнительно создаёт
+неподтверждённый платёж тестового магазина, проверяет повтор с тем же ключом и GET.
+Без `YOOKASSA_SHOP_ID` / `YOOKASSA_SECRET_KEY` этот тест пропускается. Оплата тестом
+не подтверждается; pending-платёж впоследствии отменяется самим провайдером.
