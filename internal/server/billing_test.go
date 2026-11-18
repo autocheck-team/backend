@@ -138,7 +138,7 @@ func TestBillingGateway(t *testing.T) {
 	grpcAddr, httpAddr := address(), address()
 	server := New(Config{GRPCAddr: grpcAddr, HTTPAddr: httpAddr, ShutdownTimeout: time.Second}, logger, pool, authn, validator, Services{
 		User: &v1.UnimplementedUserServiceServer{}, Problem: &v1.UnimplementedProblemServiceServer{}, Billing: service,
-		Submission: submission.NewService(submission.NewRepository(pool), billingObjects{}),
+		Submission: submission.NewService(submission.NewRepository(pool), billingObjects{}, nil),
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
