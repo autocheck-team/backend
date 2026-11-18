@@ -21,6 +21,8 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	SubmissionService_CreateSubmission_FullMethodName    = "/autocheck.v1.SubmissionService/CreateSubmission"
 	SubmissionService_GetSubmission_FullMethodName       = "/autocheck.v1.SubmissionService/GetSubmission"
+	SubmissionService_WatchSubmission_FullMethodName     = "/autocheck.v1.SubmissionService/WatchSubmission"
+	SubmissionService_GetSubmissionReport_FullMethodName = "/autocheck.v1.SubmissionService/GetSubmissionReport"
 	SubmissionService_ListSubmissions_FullMethodName     = "/autocheck.v1.SubmissionService/ListSubmissions"
 	SubmissionService_GetSubmissionSource_FullMethodName = "/autocheck.v1.SubmissionService/GetSubmissionSource"
 )
@@ -38,6 +40,12 @@ type SubmissionServiceClient interface {
 	// GetSubmission возвращает посылку с результатами по тестам. Доступно автору посылки,
 	// автору задания и администратору.
 	GetSubmission(ctx context.Context, in *GetSubmissionRequest, opts ...grpc.CallOption) (*GetSubmissionResponse, error)
+	// WatchSubmission сразу возвращает состояние и затем изменения до done/failed.
+	// Права совпадают с GetSubmission; через 10 минут требуется новое подключение.
+	WatchSubmission(ctx context.Context, in *WatchSubmissionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchSubmissionResponse], error)
+	// GetSubmissionReport возвращает отчёт; данные закрытых тестов не раскрываются.
+	// Права совпадают с GetSubmission.
+	GetSubmissionReport(ctx context.Context, in *GetSubmissionReportRequest, opts ...grpc.CallOption) (*GetSubmissionReportResponse, error)
 	// ListSubmissions возвращает посылки, новые первыми. Без problem_id — свои посылки.
 	// С problem_id автор задания и администратор видят посылки всех пользователей.
 	ListSubmissions(ctx context.Context, in *ListSubmissionsRequest, opts ...grpc.CallOption) (*ListSubmissionsResponse, error)
@@ -67,6 +75,35 @@ func (c *submissionServiceClient) GetSubmission(ctx context.Context, in *GetSubm
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSubmissionResponse)
 	err := c.cc.Invoke(ctx, SubmissionService_GetSubmission_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *submissionServiceClient) WatchSubmission(ctx context.Context, in *WatchSubmissionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchSubmissionResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SubmissionService_ServiceDesc.Streams[0], SubmissionService_WatchSubmission_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchSubmissionRequest, WatchSubmissionResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SubmissionService_WatchSubmissionClient = grpc.ServerStreamingClient[WatchSubmissionResponse]
+
+func (c *submissionServiceClient) GetSubmissionReport(ctx context.Context, in *GetSubmissionReportRequest, opts ...grpc.CallOption) (*GetSubmissionReportResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSubmissionReportResponse)
+	err := c.cc.Invoke(ctx, SubmissionService_GetSubmissionReport_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +143,12 @@ type SubmissionServiceServer interface {
 	// GetSubmission возвращает посылку с результатами по тестам. Доступно автору посылки,
 	// автору задания и администратору.
 	GetSubmission(context.Context, *GetSubmissionRequest) (*GetSubmissionResponse, error)
+	// WatchSubmission сразу возвращает состояние и затем изменения до done/failed.
+	// Права совпадают с GetSubmission; через 10 минут требуется новое подключение.
+	WatchSubmission(*WatchSubmissionRequest, grpc.ServerStreamingServer[WatchSubmissionResponse]) error
+	// GetSubmissionReport возвращает отчёт; данные закрытых тестов не раскрываются.
+	// Права совпадают с GetSubmission.
+	GetSubmissionReport(context.Context, *GetSubmissionReportRequest) (*GetSubmissionReportResponse, error)
 	// ListSubmissions возвращает посылки, новые первыми. Без problem_id — свои посылки.
 	// С problem_id автор задания и администратор видят посылки всех пользователей.
 	ListSubmissions(context.Context, *ListSubmissionsRequest) (*ListSubmissionsResponse, error)
@@ -126,6 +169,12 @@ func (UnimplementedSubmissionServiceServer) CreateSubmission(context.Context, *C
 }
 func (UnimplementedSubmissionServiceServer) GetSubmission(context.Context, *GetSubmissionRequest) (*GetSubmissionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSubmission not implemented")
+}
+func (UnimplementedSubmissionServiceServer) WatchSubmission(*WatchSubmissionRequest, grpc.ServerStreamingServer[WatchSubmissionResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchSubmission not implemented")
+}
+func (UnimplementedSubmissionServiceServer) GetSubmissionReport(context.Context, *GetSubmissionReportRequest) (*GetSubmissionReportResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSubmissionReport not implemented")
 }
 func (UnimplementedSubmissionServiceServer) ListSubmissions(context.Context, *ListSubmissionsRequest) (*ListSubmissionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSubmissions not implemented")
@@ -190,6 +239,35 @@ func _SubmissionService_GetSubmission_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SubmissionService_WatchSubmission_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchSubmissionRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SubmissionServiceServer).WatchSubmission(m, &grpc.GenericServerStream[WatchSubmissionRequest, WatchSubmissionResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SubmissionService_WatchSubmissionServer = grpc.ServerStreamingServer[WatchSubmissionResponse]
+
+func _SubmissionService_GetSubmissionReport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSubmissionReportRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubmissionServiceServer).GetSubmissionReport(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubmissionService_GetSubmissionReport_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubmissionServiceServer).GetSubmissionReport(ctx, req.(*GetSubmissionReportRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SubmissionService_ListSubmissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListSubmissionsRequest)
 	if err := dec(in); err != nil {
@@ -242,6 +320,10 @@ var SubmissionService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SubmissionService_GetSubmission_Handler,
 		},
 		{
+			MethodName: "GetSubmissionReport",
+			Handler:    _SubmissionService_GetSubmissionReport_Handler,
+		},
+		{
 			MethodName: "ListSubmissions",
 			Handler:    _SubmissionService_ListSubmissions_Handler,
 		},
@@ -250,6 +332,12 @@ var SubmissionService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SubmissionService_GetSubmissionSource_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "WatchSubmission",
+			Handler:       _SubmissionService_WatchSubmission_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "autocheck/v1/submission.proto",
 }

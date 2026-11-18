@@ -114,3 +114,79 @@ CPU-время и пик памяти приблизительны: Docker stats
 что использует воркер. Цель требует доступный Engine; отдельные Go-тесты, как и другие
 Docker-тесты проекта, пропускаются без Docker. БД, S3 и Keycloak для этой матрицы не нужны.
 Сценарии, наблюдения и границы проверки: [безопасность песочницы](docs/sandbox-security.md).
+
+## Статус посылки без поллинга
+
+`GET /v1/submissions/{id}:watch` (`WatchSubmission`, server streaming) сразу отдаёт
+текущее состояние, затем изменения и закрывает поток после `done` или `failed`.
+Права совпадают с `GetSubmission`: владелец посылки, автор задания, администратор.
+Воркер публикует `pg_notify('submission_events', id)` в транзакции результата.
+Каждый API держит одно отдельное LISTEN-соединение, переподключается при обрыве
+и перечитывает БД по сигналу. Это поток актуальных снимков, а не журнал всех переходов:
+несколько быстрых изменений могут объединиться в последнее состояние.
+
+Максимальная длительность подписки — 10 минут, затем приходит `DeadlineExceeded`
+и фронт может подключиться заново. Внутренняя сверка с БД каждые 30 секунд
+страхует пропущенный сигнал, в том числе при обрыве соединения. Неизменившиеся
+снимки не отправляются. JSON-heartbeat не нужен: gateway сразу flush-ит сообщения,
+HTTP-сервер не ограничивает время записи потока. У внешнего reverse proxy нужно
+отключить буферизацию и установить idle timeout больше 10 минут.
+
+Gateway возвращает newline-delimited JSON: `{"result":{"submission":...}}`.
+Ошибка после начала потока приходит отдельной строкой с `error` (HTTP-код уже не меняется).
+Для заголовка Authorization используется `fetch`:
+
+```js
+async function watchSubmission(id, token, onSubmission, signal) {
+  const response = await fetch(`/v1/submissions/${encodeURIComponent(id)}:watch`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal, // AbortController отменяет подписку при уходе со страницы.
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let pending = "";
+  function consume(line) {
+    if (!line.trim()) return;
+    const message = JSON.parse(line);
+    if (message.error) throw new Error(message.error.message);
+    onSubmission(message.result.submission);
+  }
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += value;
+      let end;
+      while ((end = pending.indexOf("\n")) !== -1) {
+        consume(pending.slice(0, end));
+        pending = pending.slice(end + 1);
+      }
+    }
+    consume(pending);
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
+  }
+}
+```
+
+При сетевой ошибке или `DeadlineExceeded` фронт переподключается с задержкой:
+первый снимок восстановит состояние. После финального статуса подписку повторять
+не нужно. Просроченный access-токен перед новым подключением обновляется.
+
+## Отчёт по посылке
+
+`GET /v1/submissions/{id}/report` (`GetSubmissionReport`) возвращает JSON с `languageId`,
+`status`, `verdict`, `score`, `compileLog` (только CE) и `testRuns` по ordinal.
+Права совпадают с получением посылки. До конца проверки отчёт может быть неполным.
+У каждого результата есть вердикт, wall/CPU-время в миллисекундах, память в КиБ,
+`isTimeLimitExceeded` (TL) и `isMemoryLimitExceeded` (ML).
+
+Только у открытого теста (`isSample`) с WA появляются `input`, `expectedOutput`,
+`actualOutput`: каждый содержит `text` до 4096 байт UTF-8 и `isTruncated`.
+Невалидный UTF-8 заменяется на U+FFFD. `diff` сравнивает показанные префиксы построчно:
+пробел — совпадение, `-` — строка эталона, `+` — строка решения; отсутствие последнего
+LF отмечается отдельно, CRLF сохраняется. При обрезке это diff префиксов, а не полных файлов.
+Для старого прогона без `stdout_key` фактический вывод и diff отсутствуют.
+Закрытые тесты не раскрывают вход, эталон, stdout или diff даже автору/администратору.
+Отчёт собирается из БД и S3 по запросу; `report_key` для него не используется.

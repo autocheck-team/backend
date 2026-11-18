@@ -485,6 +485,29 @@ paths:
           type: string
       tags:
         - SubmissionService
+  /v1/submissions/{id}/report:
+    get:
+      summary: |-
+        GetSubmissionReport возвращает отчёт; данные закрытых тестов не раскрываются.
+        Права совпадают с GetSubmission.
+      operationId: SubmissionService_GetSubmissionReport
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetSubmissionReportResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Посылка (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - SubmissionService
   /v1/submissions/{id}/source:
     get:
       summary: GetSubmissionSource возвращает исходный код посылки.
@@ -494,6 +517,35 @@ paths:
           description: A successful response.
           schema:
             $ref: '#/definitions/v1GetSubmissionSourceResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Посылка (UUID).
+          in: path
+          required: true
+          type: string
+      tags:
+        - SubmissionService
+  /v1/submissions/{id}:watch:
+    get:
+      summary: |-
+        WatchSubmission сразу возвращает состояние и затем изменения до done/failed.
+        Права совпадают с GetSubmission; через 10 минут требуется новое подключение.
+      operationId: SubmissionService_WatchSubmission
+      responses:
+        "200":
+          description: A successful response.(streaming responses)
+          schema:
+            type: object
+            properties:
+              result:
+                $ref: '#/definitions/v1WatchSubmissionResponse'
+              error:
+                $ref: '#/definitions/rpcStatus'
+            title: Stream result of v1WatchSubmissionResponse
         default:
           description: An unexpected error response.
           schema:
@@ -639,6 +691,32 @@ definitions:
       problem:
         $ref: '#/definitions/v1Problem'
     description: GetProblemResponse — задание.
+  v1GetSubmissionReportResponse:
+    type: object
+    properties:
+      languageId:
+        type: string
+        description: Идентификатор языка решения.
+      status:
+        $ref: '#/definitions/v1SubmissionStatus'
+        description: Текущий этап проверки.
+      verdict:
+        $ref: '#/definitions/v1Verdict'
+        description: Итоговый вердикт; UNSPECIFIED до завершения.
+      score:
+        type: integer
+        format: int32
+        description: Набранные баллы; отсутствуют до расчёта.
+      compileLog:
+        type: string
+        description: Лог компиляции только при CE, до 64 КиБ.
+      testRuns:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1SubmissionTestReport'
+        description: Выполненные тесты в порядке ordinal.
+    description: GetSubmissionReportResponse — отчёт, до завершения проверки может быть неполным.
   v1GetSubmissionResponse:
     type: object
     properties:
@@ -782,6 +860,16 @@ definitions:
         description: Время последнего изменения.
         readOnly: true
     description: Problem — задание.
+  v1ReportText:
+    type: object
+    properties:
+      text:
+        type: string
+        description: До 4096 байт UTF-8; невалидные последовательности заменяются на U+FFFD.
+      isTruncated:
+        type: boolean
+        description: Исходный объект не поместился полностью.
+    description: ReportText — текстовый префикс объекта с ограничением объёма.
   v1Role:
     type: string
     enum:
@@ -867,6 +955,52 @@ definitions:
        - SUBMISSION_STATUS_RUNNING: Выполняются тесты.
        - SUBMISSION_STATUS_DONE: Проверка завершена, вердикт известен.
        - SUBMISSION_STATUS_FAILED: Сбой проверяющей системы (вердикт SE), посылку можно перепроверить.
+  v1SubmissionTestReport:
+    type: object
+    properties:
+      ordinal:
+        type: integer
+        format: int32
+        description: Порядковый номер теста.
+      isSample:
+        type: boolean
+        description: Признак открытого теста.
+      verdict:
+        $ref: '#/definitions/v1Verdict'
+        description: Вердикт теста.
+      timeMs:
+        type: integer
+        format: int32
+        description: Время выполнения, миллисекунды.
+      memoryKb:
+        type: integer
+        format: int32
+        description: Пик памяти, килобайты.
+      cpuTimeMs:
+        type: integer
+        format: int32
+        description: Приблизительное CPU-время, миллисекунды.
+      isTimeLimitExceeded:
+        type: boolean
+        description: Превышено время (TL).
+      isMemoryLimitExceeded:
+        type: boolean
+        description: Превышена память (ML).
+      input:
+        $ref: '#/definitions/v1ReportText'
+        description: Вход только открытого теста с WA; иначе отсутствует.
+      expectedOutput:
+        $ref: '#/definitions/v1ReportText'
+        description: Эталон только открытого теста с WA; иначе отсутствует.
+      actualOutput:
+        $ref: '#/definitions/v1ReportText'
+        description: Фактический вывод только открытого теста с WA; отсутствует у старых прогонов без stdout.
+      diff:
+        type: string
+        description: |-
+          Построчный diff показанных префиксов: пробел = совпадение, минус = эталон, плюс = вывод.
+          Сохраняет CR и различие завершающего LF; пусто без сохранённого stdout.
+    description: SubmissionTestReport — результат и безопасные пояснения по тесту.
   v1TestCase:
     type: object
     properties:
@@ -983,6 +1117,13 @@ definitions:
        - VERDICT_MEMORY_LIMIT_EXCEEDED: Превышено ограничение памяти.
        - VERDICT_RUNTIME_ERROR: Ошибка выполнения (ненулевой код возврата, падение).
        - VERDICT_SYSTEM_ERROR: Сбой проверяющей системы, не вина решения.
+  v1WatchSubmissionResponse:
+    type: object
+    properties:
+      submission:
+        $ref: '#/definitions/v1Submission'
+        description: Состояние посылки на момент чтения БД.
+    description: WatchSubmissionResponse — актуальное состояние, а не журнал переходов.
 securityDefinitions:
   bearer:
     type: apiKey

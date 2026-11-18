@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"buf.build/go/protovalidate"
@@ -65,6 +66,14 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	events := submission.NewEvents(pool.Config().ConnConfig, log)
+	listenCtx, cancelListener := context.WithCancel(ctx)
+	var listeners sync.WaitGroup
+	listeners.Go(func() { events.Run(listenCtx) })
+	defer func() {
+		cancelListener()
+		listeners.Wait()
+	}()
 
 	srv := server.New(server.Config{
 		GRPCAddr:           cfg.GRPCAddr,
@@ -74,7 +83,7 @@ func run(log *slog.Logger) error {
 	}, log, pool, authn, validator, server.Services{
 		User:       user.NewService(),
 		Problem:    problem.NewService(problem.NewRepository(pool), objects, validator),
-		Submission: submission.NewService(submission.NewRepository(pool), objects),
+		Submission: submission.NewService(submission.NewRepository(pool), objects, events),
 	})
 	return srv.Run(ctx)
 }
