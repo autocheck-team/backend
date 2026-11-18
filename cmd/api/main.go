@@ -10,8 +10,10 @@ import (
 	"syscall"
 
 	"buf.build/go/protovalidate"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/autocheck-team/backend/internal/auth"
+	"github.com/autocheck-team/backend/internal/billing"
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
 	"github.com/autocheck-team/backend/internal/feedback"
@@ -76,6 +78,16 @@ func run(log *slog.Logger) error {
 		listeners.Wait()
 	}()
 
+	provider, err := billing.NewYookassa(cfg.YookassaShopID, cfg.YookassaSecretKey, cfg.YookassaAPIURL, cfg.YookassaTimeout)
+	if err != nil {
+		return err
+	}
+	// Не передаём типизированный nil как интерфейс: иначе выключенная платёжка выглядит включённой.
+	var paymentProvider billing.Provider
+	if provider != nil {
+		paymentProvider = provider
+	}
+	billingService := billing.NewService(billing.NewRepository(pool), paymentProvider, log)
 	srv := server.New(server.Config{
 		GRPCAddr:           cfg.GRPCAddr,
 		HTTPAddr:           cfg.HTTPAddr,
@@ -83,9 +95,13 @@ func run(log *slog.Logger) error {
 		ShutdownTimeout:    cfg.ShutdownTimeout,
 	}, log, pool, authn, validator, server.Services{
 		User:       user.NewService(),
+		Billing:    billingService,
 		Problem:    problem.NewService(problem.NewRepository(pool), objects, validator),
 		Submission: submission.NewService(submission.NewRepository(pool), objects, events),
 		Feedback:   feedback.NewService(feedback.NewRepository(pool, cfg.FeedbackQueryTimeout), validator),
 	})
-	return srv.Run(ctx)
+	group, ctx := errgroup.WithContext(ctx)
+	group.Go(func() error { return srv.Run(ctx) })
+	group.Go(func() error { return billingService.RunSync(ctx, cfg.BillingSyncInterval) })
+	return group.Wait()
 }

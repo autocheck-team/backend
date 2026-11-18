@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+package autocheck.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+// BillingService управляет оплатой доступа и показывает доступные квоты.
+service BillingService {
+  // ListPlans возвращает публичный каталог тарифов.
+  rpc ListPlans(ListPlansRequest) returns (ListPlansResponse) {
+    option (google.api.http) = {get: "/v1/plans"};
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {}
+    };
+  }
+  // GetMySubscription возвращает эффективный тариф и остатки текущего месяца UTC.
+  rpc GetMySubscription(GetMySubscriptionRequest) returns (GetMySubscriptionResponse) {
+    option (google.api.http) = {get: "/v1/subscriptions/me"};
+  }
+  // CheckoutSubscription создаёт оплату; повтор с тем же ключом возвращает тот же платёж.
+  rpc CheckoutSubscription(CheckoutSubscriptionRequest) returns (CheckoutSubscriptionResponse) {
+    option (google.api.http) = {
+      post: "/v1/subscriptions:checkout"
+      body: "*"
+    };
+  }
+  // ListMyPayments возвращает платежи только текущего пользователя.
+  rpc ListMyPayments(ListMyPaymentsRequest) returns (ListMyPaymentsResponse) {
+    option (google.api.http) = {get: "/v1/payments/me"};
+  }
+  // YookassaWebhook принимает уведомление без JWT и проверяет платёж через API провайдера.
+  rpc YookassaWebhook(YookassaWebhookRequest) returns (YookassaWebhookResponse) {
+    option (google.api.http) = {
+      post: "/v1/billing/yookassa/webhook"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {}
+    };
+  }
+}
+
+// Plan содержит цену в копейках и ограничения, ноль лимита означает отсутствие ограничения.
+message Plan {
+  // Стабильный код тарифа.
+  string code = 1;
+  // Название для пользователя.
+  string name = 2;
+  // Цена в копейках.
+  int64 amount_kopecks = 3;
+  // Продолжительность оплаченного периода в днях.
+  int32 period_days = 4;
+  // Число компиляций в скользящем окне; ноль — без ограничения.
+  int32 compilation_limit = 5;
+  // Длительность скользящего окна в секундах.
+  int32 compilation_window_seconds = 6;
+  // Число прогонов за календарный месяц UTC; ноль — без ограничения.
+  int32 monthly_test_run_limit = 7;
+}
+
+// ListPlansRequest запрашивает небольшой каталог тарифов целиком.
+message ListPlansRequest {}
+
+// ListPlansResponse содержит доступные тарифы.
+message ListPlansResponse {
+  // Каталог тарифов.
+  repeated Plan plans = 1;
+}
+
+// GetMySubscriptionRequest запрашивает текущие права пользователя.
+message GetMySubscriptionRequest {}
+
+// GetMySubscriptionResponse показывает эффективный тариф; после истечения действует free.
+message GetMySubscriptionResponse {
+  // Эффективный тариф.
+  Plan plan = 1;
+  // active, expired или free, если оплаты ещё не было.
+  string status = 2;
+  // Начало оплаченного доступа, отсутствует без подписки.
+  google.protobuf.Timestamp start_time = 3;
+  // Конец оплаченного доступа, отсутствует без подписки.
+  google.protobuf.Timestamp end_time = 4;
+  // Число сохранённых прогонов за текущий месяц UTC.
+  int64 test_runs_used = 5;
+  // Остаток за вычетом прогонов и резерва очереди; -1 — без ограничения.
+  int64 test_runs_remaining = 6;
+  // Остаток компиляций в текущем окне; -1 — без ограничения.
+  int64 compilations_remaining = 7;
+  // Число секунд до следующей доступной компиляции; ноль — уже доступна.
+  int64 compilation_retry_after_seconds = 8;
+  // Доступно ли оформление оплаты в этом окружении.
+  bool checkout_enabled = 9;
+}
+
+// CheckoutSubscriptionRequest фиксирует намерение оплаты, чтобы повтор не списал деньги дважды.
+message CheckoutSubscriptionRequest {
+  // Код платного тарифа.
+  string plan_code = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+  }];
+  // Абсолютный HTTP(S) адрес возврата после оплаты.
+  string return_url = 2 [(buf.validate.field).string = {
+    uri: true
+    max_len: 2048
+  }];
+  // UUID запроса, повторять при сетевых ошибках.
+  string request_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+// CheckoutSubscriptionResponse содержит адрес страницы подтверждения оплаты.
+message CheckoutSubscriptionResponse {
+  // Локальная запись оплаты.
+  Payment payment = 1;
+  // Адрес ЮKassa для редиректа; пусто у завершённого платежа.
+  string confirmation_url = 2;
+}
+
+// Payment не содержит ключей доступа или платёжных реквизитов.
+message Payment {
+  // Наш UUID платежа.
+  string id = 1;
+  // Код купленного тарифа.
+  string plan_code = 2;
+  // Зафиксированная при оформлении сумма в копейках.
+  int64 amount_kopecks = 3;
+  // pending, succeeded или canceled.
+  string status = 4;
+  // Момент создания записи.
+  google.protobuf.Timestamp create_time = 5;
+}
+
+// ListMyPaymentsRequest задаёт страницу платежей.
+message ListMyPaymentsRequest {
+  // Размер страницы, по умолчанию 20, максимум 100.
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  // Непрозрачный токен предыдущей страницы.
+  string page_token = 2;
+}
+
+// ListMyPaymentsResponse возвращает страницу от новых платежей к старым.
+message ListMyPaymentsResponse {
+  // Платежи текущего пользователя.
+  repeated Payment payments = 1;
+  // Пусто на последней странице.
+  string next_page_token = 2;
+}
+
+// YookassaWebhookRequest использует только идентификатор, остальные поля недоверенные.
+message YookassaWebhookRequest {
+  // Тип уведомления провайдера.
+  string type = 1;
+  // Имя события; не служит доказательством оплаты.
+  string event = 2;
+  // Минимальное представление объекта оплаты.
+  YookassaWebhookObject object = 3 [(buf.validate.field).required = true];
+}
+
+// YookassaWebhookObject выделяет только идентификатор из объекта провайдера.
+message YookassaWebhookObject {
+  // Идентификатор платежа ЮKassa.
+  string id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+    pattern: "^[a-zA-Z0-9-]+$"
+  }];
+}
+
+// YookassaWebhookResponse подтверждает обработку уведомления.
+message YookassaWebhookResponse {}
