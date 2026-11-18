@@ -12,11 +12,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 
 	"github.com/autocheck-team/backend/internal/db"
 )
 
-func judgeDB(t *testing.T) *pgxpool.Pool {
+func judgeDB(t *testing.T, versions ...int64) *pgxpool.Pool {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
@@ -46,7 +48,24 @@ func judgeDB(t *testing.T) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	if err := db.Migrate(ctx, pool); err != nil {
+	if len(versions) == 0 {
+		if err := db.Migrate(ctx, pool); err != nil {
+			t.Fatal(err)
+		}
+		return pool
+	}
+	// Тест отката judge не должен зависеть от миграций, добавленных другими областями.
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, os.DirFS("../db/migrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.UpTo(ctx, versions[0]); err != nil {
 		t.Fatal(err)
 	}
 	return pool
@@ -181,7 +200,7 @@ func TestRepositoryPipeline(t *testing.T) {
 }
 
 func TestJudgeMigrationDownUp(t *testing.T) {
-	pool := judgeDB(t)
+	pool := judgeDB(t, 6)
 	if err := db.Rollback(t.Context(), pool); err != nil {
 		t.Fatal(err)
 	}

@@ -40,6 +40,7 @@ type Services struct {
 	User       v1.UserServiceServer
 	Problem    v1.ProblemServiceServer
 	Submission v1.SubmissionServiceServer
+	Feedback   v1.FeedbackServiceServer
 }
 
 // Server — gRPC-сервер и HTTP-шлюз.
@@ -77,6 +78,7 @@ func New(
 	v1.RegisterUserServiceServer(g, svc.User)
 	v1.RegisterProblemServiceServer(g, svc.Problem)
 	v1.RegisterSubmissionServiceServer(g, svc.Submission)
+	v1.RegisterFeedbackServiceServer(g, svc.Feedback)
 
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(g, hs)
@@ -114,6 +116,7 @@ func (s *Server) Run(ctx context.Context) error {
 		v1.RegisterUserServiceHandler,
 		v1.RegisterProblemServiceHandler,
 		v1.RegisterSubmissionServiceHandler,
+		v1.RegisterFeedbackServiceHandler,
 	} {
 		if err := register(ctx, gw, conn); err != nil {
 			return fmt.Errorf("register gateway: %w", err)

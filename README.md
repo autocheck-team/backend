@@ -19,7 +19,7 @@ pkg/api            сгенерированный Go-код (protobuf, gRPC, gat
 cmd/api            gRPC :9090 + REST-шлюз :8080
 cmd/worker         воркер проверки посылок
 cmd/migrate        миграции БД (up / down)
-internal/          auth (Keycloak JWT), server, user, problem, submission,
+internal/          auth (Keycloak JWT), server, user, problem, submission, feedback,
                    storage (S3), sandbox (Docker), config, db (+ migrations)
 ```
 
@@ -36,6 +36,36 @@ internal/          auth (Keycloak JWT), server, user, problem, submission,
 
 После изменения proto: `make proto-gen` (нужен [buf](https://buf.build/docs/installation)),
 сгенерированный код коммитится вместе с proto. CI проверяет, что он актуален.
+
+### Запросы пользователей (HPRPR-4)
+
+`FeedbackService` принимает предложения об обновлении компилятора/языка
+(`FEEDBACK_REQUEST_TYPE_COMPILER_UPDATE`), новой библиотеке (`FEEDBACK_REQUEST_TYPE_NEW_LIBRARY`)
+и прочих изменениях (`FEEDBACK_REQUEST_TYPE_OTHER`).
+
+- `POST /v1/feedback-requests` — создание любым вошедшим пользователем: `type`, `title`
+  (1–200 символов), `text` (1–10000 символов), необязательный `language_id` из `languages`
+  (включая выключенные языки). Заголовок и текст не могут состоять только из пробелов.
+  Необязательный UUID `client_request_id` работает как у посылок: повтор от того же
+  пользователя возвращает первоначальный результат, даже если содержимое изменилось.
+- `GET /v1/feedback-requests` — свои запросы; для `admin` — все. Фильтры `status` и `type`
+  принимают enum, `UNSPECIFIED` означает отсутствие фильтра. `page_size` по умолчанию 20,
+  максимум 100; `page_token` берётся из `next_page_token`. Порядок — новые первыми;
+  при продолжении списка следует сохранять фильтры.
+- `GET /v1/feedback-requests/{id}` — свой запрос или любой для `admin`.
+  Чужой запрос возвращает 404, в том числе для роли `author`.
+- `PATCH /v1/feedback-requests/{id}` — только `admin`: обязательный `status` и
+  `admin_comment` до 5000 символов. Комментарий заменяется целиком, пустое значение
+  очищает его. Статусы: `NEW → ACCEPTED | REJECTED`, `ACCEPTED → COMPLETED | REJECTED`.
+  Повтор текущего статуса разрешён для исправления комментария; конечные статусы
+  не переоткрываются. Запрещённый переход — 400 (`FailedPrecondition`), конфликт
+  параллельных изменений — 409 (`Aborted`), запрос можно повторить после чтения.
+
+Сервер выставляет автора, начальный статус `NEW`, `create_time` и `update_time`.
+Каждая операция БД ограничена `FEEDBACK_QUERY_TIMEOUT` (по умолчанию `5s`, значение
+должно быть положительным; пример — `configs/.env.example`). Области feedback не
+нужны S3 и воркер. Интеграционные тесты репозитория и REST-шлюза запускаются при
+заданном `DATABASE_URL`; JWT подписывает локальный тестовый издатель с JWKS.
 
 ## Разработка
 

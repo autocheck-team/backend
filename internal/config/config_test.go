@@ -31,6 +31,9 @@ func TestLoadErrors(t *testing.T) {
 		{"missing database url", map[string]string{"DATABASE_URL": ""}},
 		{"bad shutdown timeout", map[string]string{"DATABASE_URL": "x", "SHUTDOWN_TIMEOUT": "soon"}},
 		{"bad concurrency", map[string]string{"DATABASE_URL": "x", "WORKER_CONCURRENCY": "0"}},
+		{"bad_feedback_timeout", map[string]string{"DATABASE_URL": "x", "FEEDBACK_QUERY_TIMEOUT": "soon"}},
+		{"zero_feedback_timeout", map[string]string{"DATABASE_URL": "x", "FEEDBACK_QUERY_TIMEOUT": "0s"}},
+		{"negative_feedback_timeout", map[string]string{"DATABASE_URL": "x", "FEEDBACK_QUERY_TIMEOUT": "-1s"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
