@@ -878,6 +878,436 @@ func (x *GetSubmissionSourceResponse) GetSource() string {
 	return ""
 }
 
+// WatchSubmissionRequest — подписка на посылку.
+type WatchSubmissionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Посылка (UUID).
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchSubmissionRequest) Reset() {
+	*x = WatchSubmissionRequest{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchSubmissionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchSubmissionRequest) ProtoMessage() {}
+
+func (x *WatchSubmissionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchSubmissionRequest.ProtoReflect.Descriptor instead.
+func (*WatchSubmissionRequest) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *WatchSubmissionRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// WatchSubmissionResponse — актуальное состояние, а не журнал переходов.
+type WatchSubmissionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Состояние посылки на момент чтения БД.
+	Submission    *Submission `protobuf:"bytes,1,opt,name=submission,proto3" json:"submission,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchSubmissionResponse) Reset() {
+	*x = WatchSubmissionResponse{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchSubmissionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchSubmissionResponse) ProtoMessage() {}
+
+func (x *WatchSubmissionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchSubmissionResponse.ProtoReflect.Descriptor instead.
+func (*WatchSubmissionResponse) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *WatchSubmissionResponse) GetSubmission() *Submission {
+	if x != nil {
+		return x.Submission
+	}
+	return nil
+}
+
+// GetSubmissionReportRequest — запрос отчёта.
+type GetSubmissionReportRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Посылка (UUID).
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSubmissionReportRequest) Reset() {
+	*x = GetSubmissionReportRequest{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSubmissionReportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSubmissionReportRequest) ProtoMessage() {}
+
+func (x *GetSubmissionReportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSubmissionReportRequest.ProtoReflect.Descriptor instead.
+func (*GetSubmissionReportRequest) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetSubmissionReportRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// GetSubmissionReportResponse — отчёт, до завершения проверки может быть неполным.
+type GetSubmissionReportResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Идентификатор языка решения.
+	LanguageId string `protobuf:"bytes,1,opt,name=language_id,json=languageId,proto3" json:"language_id,omitempty"`
+	// Текущий этап проверки.
+	Status SubmissionStatus `protobuf:"varint,2,opt,name=status,proto3,enum=autocheck.v1.SubmissionStatus" json:"status,omitempty"`
+	// Итоговый вердикт; UNSPECIFIED до завершения.
+	Verdict Verdict `protobuf:"varint,3,opt,name=verdict,proto3,enum=autocheck.v1.Verdict" json:"verdict,omitempty"`
+	// Набранные баллы; отсутствуют до расчёта.
+	Score *int32 `protobuf:"varint,4,opt,name=score,proto3,oneof" json:"score,omitempty"`
+	// Лог компиляции только при CE, до 64 КиБ.
+	CompileLog string `protobuf:"bytes,5,opt,name=compile_log,json=compileLog,proto3" json:"compile_log,omitempty"`
+	// Выполненные тесты в порядке ordinal.
+	TestRuns      []*SubmissionTestReport `protobuf:"bytes,6,rep,name=test_runs,json=testRuns,proto3" json:"test_runs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSubmissionReportResponse) Reset() {
+	*x = GetSubmissionReportResponse{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSubmissionReportResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSubmissionReportResponse) ProtoMessage() {}
+
+func (x *GetSubmissionReportResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSubmissionReportResponse.ProtoReflect.Descriptor instead.
+func (*GetSubmissionReportResponse) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetSubmissionReportResponse) GetLanguageId() string {
+	if x != nil {
+		return x.LanguageId
+	}
+	return ""
+}
+
+func (x *GetSubmissionReportResponse) GetStatus() SubmissionStatus {
+	if x != nil {
+		return x.Status
+	}
+	return SubmissionStatus_SUBMISSION_STATUS_UNSPECIFIED
+}
+
+func (x *GetSubmissionReportResponse) GetVerdict() Verdict {
+	if x != nil {
+		return x.Verdict
+	}
+	return Verdict_VERDICT_UNSPECIFIED
+}
+
+func (x *GetSubmissionReportResponse) GetScore() int32 {
+	if x != nil && x.Score != nil {
+		return *x.Score
+	}
+	return 0
+}
+
+func (x *GetSubmissionReportResponse) GetCompileLog() string {
+	if x != nil {
+		return x.CompileLog
+	}
+	return ""
+}
+
+func (x *GetSubmissionReportResponse) GetTestRuns() []*SubmissionTestReport {
+	if x != nil {
+		return x.TestRuns
+	}
+	return nil
+}
+
+// ReportText — текстовый префикс объекта с ограничением объёма.
+type ReportText struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// До 4096 байт UTF-8; невалидные последовательности заменяются на U+FFFD.
+	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	// Исходный объект не поместился полностью.
+	IsTruncated   bool `protobuf:"varint,2,opt,name=is_truncated,json=isTruncated,proto3" json:"is_truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportText) Reset() {
+	*x = ReportText{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportText) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportText) ProtoMessage() {}
+
+func (x *ReportText) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportText.ProtoReflect.Descriptor instead.
+func (*ReportText) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ReportText) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *ReportText) GetIsTruncated() bool {
+	if x != nil {
+		return x.IsTruncated
+	}
+	return false
+}
+
+// SubmissionTestReport — результат и безопасные пояснения по тесту.
+type SubmissionTestReport struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Порядковый номер теста.
+	Ordinal int32 `protobuf:"varint,1,opt,name=ordinal,proto3" json:"ordinal,omitempty"`
+	// Признак открытого теста.
+	IsSample bool `protobuf:"varint,2,opt,name=is_sample,json=isSample,proto3" json:"is_sample,omitempty"`
+	// Вердикт теста.
+	Verdict Verdict `protobuf:"varint,3,opt,name=verdict,proto3,enum=autocheck.v1.Verdict" json:"verdict,omitempty"`
+	// Время выполнения, миллисекунды.
+	TimeMs int32 `protobuf:"varint,4,opt,name=time_ms,json=timeMs,proto3" json:"time_ms,omitempty"`
+	// Пик памяти, килобайты.
+	MemoryKb int32 `protobuf:"varint,5,opt,name=memory_kb,json=memoryKb,proto3" json:"memory_kb,omitempty"`
+	// Приблизительное CPU-время, миллисекунды.
+	CpuTimeMs int32 `protobuf:"varint,6,opt,name=cpu_time_ms,json=cpuTimeMs,proto3" json:"cpu_time_ms,omitempty"`
+	// Превышено время (TL).
+	IsTimeLimitExceeded bool `protobuf:"varint,7,opt,name=is_time_limit_exceeded,json=isTimeLimitExceeded,proto3" json:"is_time_limit_exceeded,omitempty"`
+	// Превышена память (ML).
+	IsMemoryLimitExceeded bool `protobuf:"varint,8,opt,name=is_memory_limit_exceeded,json=isMemoryLimitExceeded,proto3" json:"is_memory_limit_exceeded,omitempty"`
+	// Вход только открытого теста с WA; иначе отсутствует.
+	Input *ReportText `protobuf:"bytes,9,opt,name=input,proto3" json:"input,omitempty"`
+	// Эталон только открытого теста с WA; иначе отсутствует.
+	ExpectedOutput *ReportText `protobuf:"bytes,10,opt,name=expected_output,json=expectedOutput,proto3" json:"expected_output,omitempty"`
+	// Фактический вывод только открытого теста с WA; отсутствует у старых прогонов без stdout.
+	ActualOutput *ReportText `protobuf:"bytes,11,opt,name=actual_output,json=actualOutput,proto3" json:"actual_output,omitempty"`
+	// Построчный diff показанных префиксов: пробел = совпадение, минус = эталон, плюс = вывод.
+	// Сохраняет CR и различие завершающего LF; пусто без сохранённого stdout.
+	Diff          string `protobuf:"bytes,12,opt,name=diff,proto3" json:"diff,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmissionTestReport) Reset() {
+	*x = SubmissionTestReport{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmissionTestReport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmissionTestReport) ProtoMessage() {}
+
+func (x *SubmissionTestReport) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmissionTestReport.ProtoReflect.Descriptor instead.
+func (*SubmissionTestReport) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SubmissionTestReport) GetOrdinal() int32 {
+	if x != nil {
+		return x.Ordinal
+	}
+	return 0
+}
+
+func (x *SubmissionTestReport) GetIsSample() bool {
+	if x != nil {
+		return x.IsSample
+	}
+	return false
+}
+
+func (x *SubmissionTestReport) GetVerdict() Verdict {
+	if x != nil {
+		return x.Verdict
+	}
+	return Verdict_VERDICT_UNSPECIFIED
+}
+
+func (x *SubmissionTestReport) GetTimeMs() int32 {
+	if x != nil {
+		return x.TimeMs
+	}
+	return 0
+}
+
+func (x *SubmissionTestReport) GetMemoryKb() int32 {
+	if x != nil {
+		return x.MemoryKb
+	}
+	return 0
+}
+
+func (x *SubmissionTestReport) GetCpuTimeMs() int32 {
+	if x != nil {
+		return x.CpuTimeMs
+	}
+	return 0
+}
+
+func (x *SubmissionTestReport) GetIsTimeLimitExceeded() bool {
+	if x != nil {
+		return x.IsTimeLimitExceeded
+	}
+	return false
+}
+
+func (x *SubmissionTestReport) GetIsMemoryLimitExceeded() bool {
+	if x != nil {
+		return x.IsMemoryLimitExceeded
+	}
+	return false
+}
+
+func (x *SubmissionTestReport) GetInput() *ReportText {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+func (x *SubmissionTestReport) GetExpectedOutput() *ReportText {
+	if x != nil {
+		return x.ExpectedOutput
+	}
+	return nil
+}
+
+func (x *SubmissionTestReport) GetActualOutput() *ReportText {
+	if x != nil {
+		return x.ActualOutput
+	}
+	return nil
+}
+
+func (x *SubmissionTestReport) GetDiff() string {
+	if x != nil {
+		return x.Diff
+	}
+	return ""
+}
+
 var File_autocheck_v1_submission_proto protoreflect.FileDescriptor
 
 const file_autocheck_v1_submission_proto_rawDesc = "" +
@@ -953,7 +1383,43 @@ const file_autocheck_v1_submission_proto_rawDesc = "" +
 	"\vlanguage_id\x18\x01 \x01(\tR\n" +
 	"languageId\x12\x1b\n" +
 	"\tfile_name\x18\x02 \x01(\tR\bfileName\x12\x16\n" +
-	"\x06source\x18\x03 \x01(\tR\x06source*\xcd\x01\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\"2\n" +
+	"\x16WatchSubmissionRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"S\n" +
+	"\x17WatchSubmissionResponse\x128\n" +
+	"\n" +
+	"submission\x18\x01 \x01(\v2\x18.autocheck.v1.SubmissionR\n" +
+	"submission\"6\n" +
+	"\x1aGetSubmissionReportRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\xae\x02\n" +
+	"\x1bGetSubmissionReportResponse\x12\x1f\n" +
+	"\vlanguage_id\x18\x01 \x01(\tR\n" +
+	"languageId\x126\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x1e.autocheck.v1.SubmissionStatusR\x06status\x12/\n" +
+	"\averdict\x18\x03 \x01(\x0e2\x15.autocheck.v1.VerdictR\averdict\x12\x19\n" +
+	"\x05score\x18\x04 \x01(\x05H\x00R\x05score\x88\x01\x01\x12\x1f\n" +
+	"\vcompile_log\x18\x05 \x01(\tR\n" +
+	"compileLog\x12?\n" +
+	"\ttest_runs\x18\x06 \x03(\v2\".autocheck.v1.SubmissionTestReportR\btestRunsB\b\n" +
+	"\x06_score\"C\n" +
+	"\n" +
+	"ReportText\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12!\n" +
+	"\fis_truncated\x18\x02 \x01(\bR\visTruncated\"\x88\x04\n" +
+	"\x14SubmissionTestReport\x12\x18\n" +
+	"\aordinal\x18\x01 \x01(\x05R\aordinal\x12\x1b\n" +
+	"\tis_sample\x18\x02 \x01(\bR\bisSample\x12/\n" +
+	"\averdict\x18\x03 \x01(\x0e2\x15.autocheck.v1.VerdictR\averdict\x12\x17\n" +
+	"\atime_ms\x18\x04 \x01(\x05R\x06timeMs\x12\x1b\n" +
+	"\tmemory_kb\x18\x05 \x01(\x05R\bmemoryKb\x12\x1e\n" +
+	"\vcpu_time_ms\x18\x06 \x01(\x05R\tcpuTimeMs\x123\n" +
+	"\x16is_time_limit_exceeded\x18\a \x01(\bR\x13isTimeLimitExceeded\x127\n" +
+	"\x18is_memory_limit_exceeded\x18\b \x01(\bR\x15isMemoryLimitExceeded\x12.\n" +
+	"\x05input\x18\t \x01(\v2\x18.autocheck.v1.ReportTextR\x05input\x12A\n" +
+	"\x0fexpected_output\x18\n" +
+	" \x01(\v2\x18.autocheck.v1.ReportTextR\x0eexpectedOutput\x12=\n" +
+	"\ractual_output\x18\v \x01(\v2\x18.autocheck.v1.ReportTextR\factualOutput\x12\x12\n" +
+	"\x04diff\x18\f \x01(\tR\x04diff*\xcd\x01\n" +
 	"\x10SubmissionStatus\x12!\n" +
 	"\x1dSUBMISSION_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18SUBMISSION_STATUS_QUEUED\x10\x01\x12\x1f\n" +
@@ -970,10 +1436,12 @@ const file_autocheck_v1_submission_proto_rawDesc = "" +
 	"\x1bVERDICT_TIME_LIMIT_EXCEEDED\x10\x04\x12!\n" +
 	"\x1dVERDICT_MEMORY_LIMIT_EXCEEDED\x10\x05\x12\x19\n" +
 	"\x15VERDICT_RUNTIME_ERROR\x10\x06\x12\x18\n" +
-	"\x14VERDICT_SYSTEM_ERROR\x10\a2\xac\x04\n" +
+	"\x14VERDICT_SYSTEM_ERROR\x10\a2\xc5\x06\n" +
 	"\x11SubmissionService\x12\x93\x01\n" +
 	"\x10CreateSubmission\x12%.autocheck.v1.CreateSubmissionRequest\x1a&.autocheck.v1.CreateSubmissionResponse\"0\x82\xd3\xe4\x93\x02*:\x01*\"%/v1/problems/{problem_id}/submissions\x12v\n" +
-	"\rGetSubmission\x12\".autocheck.v1.GetSubmissionRequest\x1a#.autocheck.v1.GetSubmissionResponse\"\x1c\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/submissions/{id}\x12w\n" +
+	"\rGetSubmission\x12\".autocheck.v1.GetSubmissionRequest\x1a#.autocheck.v1.GetSubmissionResponse\"\x1c\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/submissions/{id}\x12\x84\x01\n" +
+	"\x0fWatchSubmission\x12$.autocheck.v1.WatchSubmissionRequest\x1a%.autocheck.v1.WatchSubmissionResponse\"\"\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/submissions/{id}:watch0\x01\x12\x8f\x01\n" +
+	"\x13GetSubmissionReport\x12(.autocheck.v1.GetSubmissionReportRequest\x1a).autocheck.v1.GetSubmissionReportResponse\"#\x82\xd3\xe4\x93\x02\x1d\x12\x1b/v1/submissions/{id}/report\x12w\n" +
 	"\x0fListSubmissions\x12$.autocheck.v1.ListSubmissionsRequest\x1a%.autocheck.v1.ListSubmissionsResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/submissions\x12\x8f\x01\n" +
 	"\x13GetSubmissionSource\x12(.autocheck.v1.GetSubmissionSourceRequest\x1a).autocheck.v1.GetSubmissionSourceResponse\"#\x82\xd3\xe4\x93\x02\x1d\x12\x1b/v1/submissions/{id}/sourceB\xb8\x01\n" +
 	"\x10com.autocheck.v1B\x0fSubmissionProtoP\x01ZBgithub.com/autocheck-team/backend/pkg/api/autocheck/v1;autocheckv1\xa2\x02\x03AXX\xaa\x02\fAutocheck.V1\xca\x02\fAutocheck\\V1\xe2\x02\x18Autocheck\\V1\\GPBMetadata\xea\x02\rAutocheck::V1b\x06proto3"
@@ -991,7 +1459,7 @@ func file_autocheck_v1_submission_proto_rawDescGZIP() []byte {
 }
 
 var file_autocheck_v1_submission_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_autocheck_v1_submission_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_autocheck_v1_submission_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_autocheck_v1_submission_proto_goTypes = []any{
 	(SubmissionStatus)(0),               // 0: autocheck.v1.SubmissionStatus
 	(Verdict)(0),                        // 1: autocheck.v1.Verdict
@@ -1005,32 +1473,50 @@ var file_autocheck_v1_submission_proto_goTypes = []any{
 	(*ListSubmissionsResponse)(nil),     // 9: autocheck.v1.ListSubmissionsResponse
 	(*GetSubmissionSourceRequest)(nil),  // 10: autocheck.v1.GetSubmissionSourceRequest
 	(*GetSubmissionSourceResponse)(nil), // 11: autocheck.v1.GetSubmissionSourceResponse
-	(*timestamppb.Timestamp)(nil),       // 12: google.protobuf.Timestamp
+	(*WatchSubmissionRequest)(nil),      // 12: autocheck.v1.WatchSubmissionRequest
+	(*WatchSubmissionResponse)(nil),     // 13: autocheck.v1.WatchSubmissionResponse
+	(*GetSubmissionReportRequest)(nil),  // 14: autocheck.v1.GetSubmissionReportRequest
+	(*GetSubmissionReportResponse)(nil), // 15: autocheck.v1.GetSubmissionReportResponse
+	(*ReportText)(nil),                  // 16: autocheck.v1.ReportText
+	(*SubmissionTestReport)(nil),        // 17: autocheck.v1.SubmissionTestReport
+	(*timestamppb.Timestamp)(nil),       // 18: google.protobuf.Timestamp
 }
 var file_autocheck_v1_submission_proto_depIdxs = []int32{
 	0,  // 0: autocheck.v1.Submission.status:type_name -> autocheck.v1.SubmissionStatus
 	1,  // 1: autocheck.v1.Submission.verdict:type_name -> autocheck.v1.Verdict
-	12, // 2: autocheck.v1.Submission.create_time:type_name -> google.protobuf.Timestamp
-	12, // 3: autocheck.v1.Submission.start_time:type_name -> google.protobuf.Timestamp
-	12, // 4: autocheck.v1.Submission.finish_time:type_name -> google.protobuf.Timestamp
+	18, // 2: autocheck.v1.Submission.create_time:type_name -> google.protobuf.Timestamp
+	18, // 3: autocheck.v1.Submission.start_time:type_name -> google.protobuf.Timestamp
+	18, // 4: autocheck.v1.Submission.finish_time:type_name -> google.protobuf.Timestamp
 	1,  // 5: autocheck.v1.TestRun.verdict:type_name -> autocheck.v1.Verdict
 	2,  // 6: autocheck.v1.CreateSubmissionResponse.submission:type_name -> autocheck.v1.Submission
 	2,  // 7: autocheck.v1.GetSubmissionResponse.submission:type_name -> autocheck.v1.Submission
 	3,  // 8: autocheck.v1.GetSubmissionResponse.test_runs:type_name -> autocheck.v1.TestRun
 	2,  // 9: autocheck.v1.ListSubmissionsResponse.submissions:type_name -> autocheck.v1.Submission
-	4,  // 10: autocheck.v1.SubmissionService.CreateSubmission:input_type -> autocheck.v1.CreateSubmissionRequest
-	6,  // 11: autocheck.v1.SubmissionService.GetSubmission:input_type -> autocheck.v1.GetSubmissionRequest
-	8,  // 12: autocheck.v1.SubmissionService.ListSubmissions:input_type -> autocheck.v1.ListSubmissionsRequest
-	10, // 13: autocheck.v1.SubmissionService.GetSubmissionSource:input_type -> autocheck.v1.GetSubmissionSourceRequest
-	5,  // 14: autocheck.v1.SubmissionService.CreateSubmission:output_type -> autocheck.v1.CreateSubmissionResponse
-	7,  // 15: autocheck.v1.SubmissionService.GetSubmission:output_type -> autocheck.v1.GetSubmissionResponse
-	9,  // 16: autocheck.v1.SubmissionService.ListSubmissions:output_type -> autocheck.v1.ListSubmissionsResponse
-	11, // 17: autocheck.v1.SubmissionService.GetSubmissionSource:output_type -> autocheck.v1.GetSubmissionSourceResponse
-	14, // [14:18] is the sub-list for method output_type
-	10, // [10:14] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	2,  // 10: autocheck.v1.WatchSubmissionResponse.submission:type_name -> autocheck.v1.Submission
+	0,  // 11: autocheck.v1.GetSubmissionReportResponse.status:type_name -> autocheck.v1.SubmissionStatus
+	1,  // 12: autocheck.v1.GetSubmissionReportResponse.verdict:type_name -> autocheck.v1.Verdict
+	17, // 13: autocheck.v1.GetSubmissionReportResponse.test_runs:type_name -> autocheck.v1.SubmissionTestReport
+	1,  // 14: autocheck.v1.SubmissionTestReport.verdict:type_name -> autocheck.v1.Verdict
+	16, // 15: autocheck.v1.SubmissionTestReport.input:type_name -> autocheck.v1.ReportText
+	16, // 16: autocheck.v1.SubmissionTestReport.expected_output:type_name -> autocheck.v1.ReportText
+	16, // 17: autocheck.v1.SubmissionTestReport.actual_output:type_name -> autocheck.v1.ReportText
+	4,  // 18: autocheck.v1.SubmissionService.CreateSubmission:input_type -> autocheck.v1.CreateSubmissionRequest
+	6,  // 19: autocheck.v1.SubmissionService.GetSubmission:input_type -> autocheck.v1.GetSubmissionRequest
+	12, // 20: autocheck.v1.SubmissionService.WatchSubmission:input_type -> autocheck.v1.WatchSubmissionRequest
+	14, // 21: autocheck.v1.SubmissionService.GetSubmissionReport:input_type -> autocheck.v1.GetSubmissionReportRequest
+	8,  // 22: autocheck.v1.SubmissionService.ListSubmissions:input_type -> autocheck.v1.ListSubmissionsRequest
+	10, // 23: autocheck.v1.SubmissionService.GetSubmissionSource:input_type -> autocheck.v1.GetSubmissionSourceRequest
+	5,  // 24: autocheck.v1.SubmissionService.CreateSubmission:output_type -> autocheck.v1.CreateSubmissionResponse
+	7,  // 25: autocheck.v1.SubmissionService.GetSubmission:output_type -> autocheck.v1.GetSubmissionResponse
+	13, // 26: autocheck.v1.SubmissionService.WatchSubmission:output_type -> autocheck.v1.WatchSubmissionResponse
+	15, // 27: autocheck.v1.SubmissionService.GetSubmissionReport:output_type -> autocheck.v1.GetSubmissionReportResponse
+	9,  // 28: autocheck.v1.SubmissionService.ListSubmissions:output_type -> autocheck.v1.ListSubmissionsResponse
+	11, // 29: autocheck.v1.SubmissionService.GetSubmissionSource:output_type -> autocheck.v1.GetSubmissionSourceResponse
+	24, // [24:30] is the sub-list for method output_type
+	18, // [18:24] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_autocheck_v1_submission_proto_init() }
@@ -1039,13 +1525,14 @@ func file_autocheck_v1_submission_proto_init() {
 		return
 	}
 	file_autocheck_v1_submission_proto_msgTypes[0].OneofWrappers = []any{}
+	file_autocheck_v1_submission_proto_msgTypes[13].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_autocheck_v1_submission_proto_rawDesc), len(file_autocheck_v1_submission_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   10,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

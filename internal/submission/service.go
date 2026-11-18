@@ -28,17 +28,28 @@ type Objects interface {
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
 }
 
+// submissions отделяет сценарии API от PostgreSQL; подписка перечитывает снимок через Get.
+type submissions interface {
+	Target(ctx context.Context, problemID uuid.UUID, languageID string) (Target, error)
+	Create(ctx context.Context, sub Submission) (Submission, error)
+	FindByClientRequest(ctx context.Context, userID, requestID uuid.UUID) (Submission, error)
+	Get(ctx context.Context, id uuid.UUID) (Submission, error)
+	List(ctx context.Context, filter ListFilter) ([]Submission, error)
+	TestRuns(ctx context.Context, submissionID uuid.UUID) ([]TestRun, error)
+}
+
 // Service реализует SubmissionService.
 type Service struct {
 	v1.UnimplementedSubmissionServiceServer
 
-	repo    *Repository
+	repo    submissions
 	objects Objects
+	events  *Events
 }
 
 // NewService создаёт Service.
-func NewService(repo *Repository, objects Objects) *Service {
-	return &Service{repo: repo, objects: objects}
+func NewService(repo submissions, objects Objects, events *Events) *Service {
+	return &Service{repo: repo, objects: objects, events: events}
 }
 
 // CreateSubmission принимает решение и ставит его в очередь проверки.

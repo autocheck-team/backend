@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -64,7 +65,26 @@ func setup(t *testing.T) *fixture {
 		t.Skip("DATABASE_URL not set")
 	}
 	ctx := context.Background()
-	pool, err := db.Connect(ctx, url)
+	admin, err := db.Connect(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(admin.Close)
+	schema := "submission_" + uuid.NewString()[:8]
+	if _, err := admin.Exec(ctx, `CREATE SCHEMA `+pgx.Identifier{schema}.Sanitize()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := admin.Exec(context.Background(), `DROP SCHEMA `+pgx.Identifier{schema}.Sanitize()+` CASCADE`); err != nil {
+			t.Errorf("drop test schema: %v", err)
+		}
+	})
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +94,7 @@ func setup(t *testing.T) *fixture {
 	}
 
 	f := &fixture{objects: &memObjects{data: map[string][]byte{}}, pool: pool}
-	f.svc = NewService(NewRepository(pool), f.objects)
+	f.svc = NewService(NewRepository(pool), f.objects, nil)
 	mk := func(role auth.Role, roles ...auth.Role) auth.Principal {
 		p := auth.Principal{ID: uuid.New(), Email: uuid.NewString() + "@test.local", Roles: roles}
 		if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, display_name, role) VALUES ($1, $2, 'u', $3)`,

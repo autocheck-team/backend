@@ -115,7 +115,14 @@ func (r *Repository) owned(ctx context.Context, j Job, fn func(context.Context, 
 		if err != nil {
 			return fmt.Errorf("lock owned job: %w", err)
 		}
-		return fn(ctx, tx)
+		if err := fn(ctx, tx); err != nil {
+			return err
+		}
+		// Сигнал доставляется только после commit, вместе с новым состоянием и тестами.
+		if _, err := tx.Exec(ctx, `SELECT pg_notify('submission_events', $1)`, j.SubmissionID.String()); err != nil {
+			return fmt.Errorf("notify submission change: %w", err)
+		}
+		return nil
 	})
 }
 

@@ -44,14 +44,17 @@ type Submission struct {
 
 // TestRun — результат на одном тесте.
 type TestRun struct {
-	CPUTimeMS  int32
-	StderrTail string
-	TestCaseID uuid.UUID
-	Ordinal    int32
-	IsSample   bool
-	Verdict    string
-	TimeMS     int32
-	MemoryKB   int32
+	InputKey    string
+	ExpectedKey string
+	StdoutKey   *string
+	CPUTimeMS   int32
+	StderrTail  string
+	TestCaseID  uuid.UUID
+	Ordinal     int32
+	IsSample    bool
+	Verdict     string
+	TimeMS      int32
+	MemoryKB    int32
 }
 
 // Target — то, что нужно знать о задании и языке для приёма посылки.
@@ -205,8 +208,14 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Submission, erro
 
 // TestRuns возвращает результаты посылки по тестам в порядке тестов.
 func (r *Repository) TestRuns(ctx context.Context, submissionID uuid.UUID) ([]TestRun, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	rows, err := r.pool.Query(ctx, `
-		SELECT tr.test_case_id, tc.ordinal, tc.is_sample, tr.verdict::text, tr.time_ms, tr.memory_kb, tr.cpu_time_ms, CASE WHEN tc.is_sample THEN coalesce(tr.stderr_tail, '') ELSE '' END
+		SELECT tr.test_case_id, tc.ordinal, tc.is_sample, tr.verdict::text, tr.time_ms, tr.memory_kb, tr.cpu_time_ms,
+		       CASE WHEN tc.is_sample THEN coalesce(tr.stderr_tail, '') ELSE '' END,
+		       CASE WHEN tc.is_sample THEN tc.input_key ELSE '' END,
+		       CASE WHEN tc.is_sample THEN tc.expected_key ELSE '' END,
+		       CASE WHEN tc.is_sample THEN tr.stdout_key ELSE NULL END
 		FROM test_runs tr JOIN test_cases tc ON tc.id = tr.test_case_id
 		WHERE tr.submission_id = $1
 		ORDER BY tc.ordinal`, submissionID)
@@ -215,7 +224,9 @@ func (r *Repository) TestRuns(ctx context.Context, submissionID uuid.UUID) ([]Te
 	}
 	runs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (TestRun, error) {
 		var t TestRun
-		return t, row.Scan(&t.TestCaseID, &t.Ordinal, &t.IsSample, &t.Verdict, &t.TimeMS, &t.MemoryKB, &t.CPUTimeMS, &t.StderrTail)
+		err := row.Scan(&t.TestCaseID, &t.Ordinal, &t.IsSample, &t.Verdict, &t.TimeMS, &t.MemoryKB,
+			&t.CPUTimeMS, &t.StderrTail, &t.InputKey, &t.ExpectedKey, &t.StdoutKey)
+		return t, err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list test runs: %w", err)
