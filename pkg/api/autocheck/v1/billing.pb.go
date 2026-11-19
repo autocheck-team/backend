@@ -42,8 +42,10 @@ type Plan struct {
 	CompilationWindowSeconds int32 `protobuf:"varint,6,opt,name=compilation_window_seconds,json=compilationWindowSeconds,proto3" json:"compilation_window_seconds,omitempty"`
 	// Число прогонов за календарный месяц UTC; ноль — без ограничения.
 	MonthlyTestRunLimit int32 `protobuf:"varint,7,opt,name=monthly_test_run_limit,json=monthlyTestRunLimit,proto3" json:"monthly_test_run_limit,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Доступ к учебным материалам платформы.
+	HasMaterialAccess bool `protobuf:"varint,8,opt,name=has_material_access,json=hasMaterialAccess,proto3" json:"has_material_access,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Plan) Reset() {
@@ -123,6 +125,13 @@ func (x *Plan) GetMonthlyTestRunLimit() int32 {
 		return x.MonthlyTestRunLimit
 	}
 	return 0
+}
+
+func (x *Plan) GetHasMaterialAccess() bool {
+	if x != nil {
+		return x.HasMaterialAccess
+	}
+	return false
 }
 
 // ListPlansRequest запрашивает небольшой каталог тарифов целиком.
@@ -825,7 +834,7 @@ var File_autocheck_v1_billing_proto protoreflect.FileDescriptor
 
 const file_autocheck_v1_billing_proto_rawDesc = "" +
 	"\n" +
-	"\x1aautocheck/v1/billing.proto\x12\fautocheck.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\"\x96\x02\n" +
+	"\x1aautocheck/v1/billing.proto\x12\fautocheck.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\"\xc6\x02\n" +
 	"\x04Plan\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
@@ -834,7 +843,8 @@ const file_autocheck_v1_billing_proto_rawDesc = "" +
 	"periodDays\x12+\n" +
 	"\x11compilation_limit\x18\x05 \x01(\x05R\x10compilationLimit\x12<\n" +
 	"\x1acompilation_window_seconds\x18\x06 \x01(\x05R\x18compilationWindowSeconds\x123\n" +
-	"\x16monthly_test_run_limit\x18\a \x01(\x05R\x13monthlyTestRunLimit\"\x12\n" +
+	"\x16monthly_test_run_limit\x18\a \x01(\x05R\x13monthlyTestRunLimit\x12.\n" +
+	"\x13has_material_access\x18\b \x01(\bR\x11hasMaterialAccess\"\x12\n" +
 	"\x10ListPlansRequest\"=\n" +
 	"\x11ListPlansResponse\x12(\n" +
 	"\x05plans\x18\x01 \x03(\v2\x12.autocheck.v1.PlanR\x05plans\"\x1a\n" +

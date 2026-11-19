@@ -17,6 +17,7 @@ import (
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
 	"github.com/autocheck-team/backend/internal/feedback"
+	"github.com/autocheck-team/backend/internal/material"
 	"github.com/autocheck-team/backend/internal/problem"
 	"github.com/autocheck-team/backend/internal/server"
 	"github.com/autocheck-team/backend/internal/storage"
@@ -87,14 +88,18 @@ func run(log *slog.Logger) error {
 	if provider != nil {
 		paymentProvider = provider
 	}
-	billingService := billing.NewService(billing.NewRepository(pool), paymentProvider, log)
+	billingRepository := billing.NewRepository(pool)
+	billingService := billing.NewService(billingRepository, paymentProvider, log)
 	srv := server.New(server.Config{
 		GRPCAddr:           cfg.GRPCAddr,
 		HTTPAddr:           cfg.HTTPAddr,
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
 		ShutdownTimeout:    cfg.ShutdownTimeout,
 	}, log, pool, authn, validator, server.Services{
-		User:       user.NewService(),
+		User: user.NewService(),
+		Material: material.New(material.NewRepository(pool, cfg.MaterialQueryTimeout), billingRepository, objects, validator, material.Config{
+			MaxAttachmentBytes: cfg.MaterialMaxAttachmentBytes, ObjectTimeout: cfg.MaterialObjectTimeout,
+		}),
 		Billing:    billingService,
 		Problem:    problem.NewService(problem.NewRepository(pool), objects, validator),
 		Submission: submission.NewService(submission.NewRepository(pool), objects, events),

@@ -15,6 +15,9 @@ func TestLoadDefaults(t *testing.T) {
 	if c.YookassaAPIURL != "https://api.yookassa.ru/v3" || c.YookassaTimeout != 10*time.Second || c.BillingSyncInterval != 30*time.Second {
 		t.Fatalf("unexpected billing defaults")
 	}
+	if c.MaterialQueryTimeout != 5*time.Second || c.MaterialObjectTimeout != 30*time.Second || c.MaterialMaxAttachmentBytes != 10485760 {
+		t.Fatal("unexpected material defaults")
+	}
 	if c.HTTPAddr != ":8080" {
 		t.Errorf("HTTPAddr = %q, want :8080", c.HTTPAddr)
 	}
@@ -31,6 +34,13 @@ func TestLoadErrors(t *testing.T) {
 		name string
 		env  map[string]string
 	}{
+		{"bad_material_query_timeout", map[string]string{"DATABASE_URL": "x", "MATERIAL_QUERY_TIMEOUT": "bad"}},
+		{"zero_material_query_timeout", map[string]string{"DATABASE_URL": "x", "MATERIAL_QUERY_TIMEOUT": "0s"}},
+		{"bad_material_object_timeout", map[string]string{"DATABASE_URL": "x", "MATERIAL_OBJECT_TIMEOUT": "bad"}},
+		{"zero_material_object_timeout", map[string]string{"DATABASE_URL": "x", "MATERIAL_OBJECT_TIMEOUT": "0s"}},
+		{"bad_material_limit", map[string]string{"DATABASE_URL": "x", "MATERIAL_MAX_ATTACHMENT_BYTES": "bad"}},
+		{"zero_material_limit", map[string]string{"DATABASE_URL": "x", "MATERIAL_MAX_ATTACHMENT_BYTES": "0"}},
+		{"excessive_material_limit", map[string]string{"DATABASE_URL": "x", "MATERIAL_MAX_ATTACHMENT_BYTES": "67108865"}},
 		{"missing database url", map[string]string{"DATABASE_URL": ""}},
 		{"bad shutdown timeout", map[string]string{"DATABASE_URL": "x", "SHUTDOWN_TIMEOUT": "soon"}},
 		{"bad yookassa timeout", map[string]string{"DATABASE_URL": "x", "YOOKASSA_TIMEOUT": "no"}},

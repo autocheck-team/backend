@@ -19,7 +19,7 @@ pkg/api            сгенерированный Go-код (protobuf, gRPC, gat
 cmd/api            gRPC :9090 + REST-шлюз :8080
 cmd/worker         воркер проверки посылок
 cmd/migrate        миграции БД (up / down)
-internal/          auth (Keycloak JWT), server, user, problem, submission, feedback, billing,
+internal/          auth (Keycloak JWT), server, user, problem, submission, feedback, billing, material,
                    storage (S3), sandbox (Docker), config, db (+ migrations)
 ```
 
@@ -276,3 +276,64 @@ REST API (gRPC `BillingService`):
 неподтверждённый платёж тестового магазина, проверяет повтор с тем же ключом и GET.
 Без `YOOKASSA_SHOP_ID` / `YOOKASSA_SECRET_KEY` этот тест пропускается. Оплата тестом
 не подтверждается; pending-платёж впоследствии отменяется самим провайдером.
+
+## Учебные материалы (HPRPR-7)
+
+Материалы платформы связаны с одним или несколькими заданиями. `MaterialService`
+доступен через gRPC и REST с теми же Keycloak JWT и валидацией, что остальные API.
+
+- `POST /v1/materials` — только admin: `material` с `title`, `description`,
+  `content_markdown`, `problem_ids` (1–100 UUID), `ordinal` (от 0), `is_published`;
+  обязательный UUID `request_id` обеспечивает идемпотентное создание.
+- `PUT /v1/materials/{id}` — только admin: полная замена `material`, включая
+  публикацию и связи с заданиями. Поле `id` берётся из пути. Черновик и его описание
+  видит только admin, в том числе при наличии Pro у обычного пользователя.
+- `DELETE /v1/materials/{id}` — только admin: удаление вместе с вложениями.
+  Повтор безопасен и позволяет завершить очистку S3 после временного сбоя.
+- `GET /v1/materials` — описания для любого вошедшего; необязательный `problem_id`.
+  `GET /v1/problems/{problem_id}/materials` — тот же список с фильтром задания.
+  `page_size` по умолчанию 20, максимум 100; `next_page_token` передаётся как
+  `page_token`. Порядок: `ordinal ASC, id ASC`, keyset без OFFSET. При продолжении
+  сохраняйте фильтр; изменение порядка/связей администратором может переместить
+  запись относительно курсора. Списки никогда не возвращают Markdown и вложения.
+- `GET /v1/materials/{id}` — описание и `is_locked` для любого вошедшего.
+  При активной подписке с `plan.has_material_access=true` (Pro) или роли admin
+  возвращаются также `content_markdown` и подтверждённые вложения с GET-ссылками.
+  Для free, отменённой, будущей или истёкшей подписки `is_locked=true`, Markdown
+  пустой, вложений нет. Выбран единый ответ с `is_locked`, чтобы клиент мог показать
+  описание и предложение «доступно по подписке Pro» без повторного запроса.
+  Полномочия автора задания сами по себе платного доступа не дают.
+
+Вложения доступны только admin для изменения:
+
+1. `POST /v1/materials/{material_id}/attachments` с `filename` и UUID `request_id`
+   возвращает `attachment.id`, `upload_url`, `upload_expire_time`, `max_size_bytes`.
+   Повтор операции возвращает то же вложение; после confirm PUT-ссылка больше
+   не выдаётся. Имя файла не должно содержать путь или управляющие символы.
+2. Загрузите файл HTTP PUT по `upload_url` (срок 15 минут).
+3. `POST /v1/materials/{material_id}/attachments/{id}:confirm` с пустым JSON `{}`
+   проверяет непустой файл, размер и сигнатуру формата: PDF, PNG, JPEG, GIF, WebP.
+   SVG/HTML не принимаются. Подтверждение читает не более лимита + 1 байт и сохраняет
+   закрытую копию; последующий PUT по старой ссылке не меняет выдаваемый файл.
+   Повтор confirm сохраняет первую подтверждённую копию.
+4. `GET /v1/materials/{id}` выдаёт ссылки на подтверждённые вложения при доступе.
+   Ссылки действуют 5 минут, `download_expire_time` показывает срок. Уже выданная
+   ссылка остаётся действующей до истечения срока даже после завершения подписки.
+   Admin дополнительно видит метаданные ожидающих confirm вложений без GET-ссылок.
+5. `DELETE /v1/materials/{material_id}/attachments/{id}` удаляет вложение и объекты;
+   повтор безопасен. Бакет должен оставаться закрытым от анонимного чтения.
+
+Лимит применяется при confirm, а не при загрузке PUT в S3: неподтверждённые файлы
+не выдаются пользователям. Для удаления заброшенных/повторно загруженных staging-файлов
+можно настроить lifecycle хранилища на ключи `materials/*/attachments/*/upload`;
+подтверждённые копии в `confirmed/` под это правило попадать не должны.
+
+Настройки в `configs/.env.example`: `MATERIAL_QUERY_TIMEOUT=5s`,
+`MATERIAL_OBJECT_TIMEOUT=30s`, `MATERIAL_MAX_ATTACHMENT_BYTES=10485760` (10 МиБ;
+допустимы значения 1–67108864). Используется существующее подключение `S3_*`.
+Флаг `has_material_access` также виден в каталоге тарифов и текущей подписке.
+
+Тесты `internal/material` используют настоящий PostgreSQL (`DATABASE_URL`), локальный
+JWT/JWKS и сетевой REST→gRPC gateway. `TestGatewayMaterialS3` автоматически поднимает
+SeaweedFS 4.53 через Docker на динамическом localhost-порту и удаляет свой контейнер.
+Проверяются PUT/confirm/GET, неизменяемость подтверждённого файла и очистка S3.

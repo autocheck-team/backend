@@ -59,6 +59,8 @@ message Plan {
   int32 compilation_window_seconds = 6;
   // Число прогонов за календарный месяц UTC; ноль — без ограничения.
   int32 monthly_test_run_limit = 7;
+  // Доступ к учебным материалам платформы.
+  bool has_material_access = 8;
 }
 
 // ListPlansRequest запрашивает небольшой каталог тарифов целиком.
