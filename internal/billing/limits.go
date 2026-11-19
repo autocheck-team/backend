@@ -46,7 +46,7 @@ func Snapshot(ctx context.Context, query Queryer, userID uuid.UUID) (Limits, err
   WHERE s.user_id=$1 AND cardinality(l.compile_cmd)>0
    AND s.created_at>now()-make_interval(secs=>p.compilation_window_seconds)
  )
- SELECT p.code,p.name,p.amount_kopecks,p.period_days,p.compilation_limit,p.compilation_window_seconds,p.monthly_test_run_limit,
+ SELECT p.code,p.name,p.amount_kopecks,p.period_days,p.compilation_limit,p.compilation_window_seconds,p.monthly_test_run_limit,p.daily_test_generation_limit,
   CASE WHEN sub.user_id IS NULL THEN 'free' WHEN sub.status='active' AND sub.ends_at<=now() THEN 'expired' ELSE sub.status END,
   sub.starts_at,sub.ends_at,
   COALESCE((SELECT sum(used) FROM usage),0)::bigint,
@@ -56,7 +56,7 @@ func Snapshot(ctx context.Context, query Queryer, userID uuid.UUID) (Limits, err
    FROM compilations ORDER BY created_at DESC OFFSET GREATEST(p.compilation_limit-1,0) LIMIT 1),0)::double precision
  FROM plans p LEFT JOIN subscriptions sub ON sub.user_id=$1 WHERE p.code=(SELECT code FROM effective)`, userID).
 		Scan(&limits.Plan.Code, &limits.Plan.Name, &limits.Plan.AmountKopecks, &limits.Plan.PeriodDays,
-			&limits.Plan.CompilationLimit, &limits.Plan.CompilationWindowSeconds, &limits.Plan.MonthlyTestRunLimit,
+			&limits.Plan.CompilationLimit, &limits.Plan.CompilationWindowSeconds, &limits.Plan.MonthlyTestRunLimit, &limits.Plan.DailyTestGenerationLimit,
 			&limits.Status, &limits.StartsAt, &limits.EndsAt, &limits.Used, &limits.Reserved, &limits.Compilations, &retrySeconds)
 	if err != nil {
 		return Limits{}, fmt.Errorf("read billing limits: %w", err)

@@ -9,6 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/autocheck-team/backend/internal/llm"
+	"github.com/autocheck-team/backend/internal/testgeneration"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
 	"github.com/autocheck-team/backend/internal/judge"
@@ -61,9 +65,20 @@ func run(log *slog.Logger) error {
 		Log: log, ID: cfg.WorkerID, Concurrency: cfg.WorkerConcurrency, PollInterval: cfg.WorkerPollInterval,
 	}
 	log.Info("worker started", "id", cfg.WorkerID, "concurrency", cfg.WorkerConcurrency)
-	go sweep(ctx, log, sb)
-	worker.Run(ctx)
-	return nil
+	model, err := llm.New(cfg.LLM)
+	if err != nil {
+		return err
+	}
+	group, ctx := errgroup.WithContext(ctx)
+	group.Go(func() error { sweep(ctx, log, sb); return nil })
+	group.Go(func() error { worker.Run(ctx); return nil })
+	if model.Enabled() {
+		group.Go(func() error {
+			testgeneration.NewRepository(pool).Run(ctx, testgeneration.NewRunner(model, sb), cfg.WorkerConcurrency, cfg.WorkerPollInterval, func(err error) { log.ErrorContext(ctx, "test generation failed", "err", err) })
+			return nil
+		})
+	}
+	return group.Wait()
 }
 
 // sweep убирает остатки упавших воркеров при старте и затем периодически.

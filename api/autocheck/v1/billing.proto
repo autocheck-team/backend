@@ -59,6 +59,8 @@ message Plan {
   int32 compilation_window_seconds = 6;
   // Число прогонов за календарный месяц UTC; ноль — без ограничения.
   int32 monthly_test_run_limit = 7;
+  // Максимум генераций за календарные сутки UTC; ноль запрещает генерации.
+  int32 daily_test_generation_limit = 8;
 }
 
 // ListPlansRequest запрашивает небольшой каталог тарифов целиком.

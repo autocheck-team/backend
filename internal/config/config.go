@@ -8,10 +8,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/autocheck-team/backend/internal/llm"
 )
 
 // Config — настройки api, worker и migrate.
 type Config struct {
+	LLM                  llm.Config
 	HTTPAddr             string
 	GRPCAddr             string
 	DatabaseURL          string
@@ -73,6 +76,7 @@ func Load() (Config, error) {
 		}
 	}
 
+	c.LLM = llm.Config{BaseURL: getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1"), APIKey: os.Getenv("LLM_API_KEY"), Model: getenv("LLM_MODEL", "nvidia/nemotron-3.5-super-vl:free"), EmbeddingModel: getenv("LLM_EMBEDDING_MODEL", "nvidia/nemotron-3.5-embed-1b:free")}
 	var errs []error
 	if c.DatabaseURL == "" {
 		errs = append(errs, errors.New("DATABASE_URL is required"))
@@ -107,6 +111,24 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("BILLING_SYNC_INTERVAL: %w", err))
 	} else if c.BillingSyncInterval <= 0 {
 		errs = append(errs, errors.New("BILLING_SYNC_INTERVAL must be positive"))
+	}
+	if c.LLM.Timeout, err = time.ParseDuration(getenv("LLM_TIMEOUT", "2m")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid llm timeout: %w", err))
+	}
+	if c.LLM.Retries, err = strconv.Atoi(getenv("LLM_RETRIES", "2")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid llm retries: %w", err))
+	}
+	if c.LLM.MaxTokens, err = strconv.Atoi(getenv("LLM_MAX_TOKENS", "8192")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid llm token limit: %w", err))
+	}
+	if c.LLM.MaxTokens <= 0 {
+		errs = append(errs, errors.New("LLM_MAX_TOKENS must be positive"))
+	}
+	if c.LLM.Timeout <= 0 {
+		errs = append(errs, errors.New("LLM_TIMEOUT must be positive"))
+	}
+	if _, err := llm.New(c.LLM); err != nil {
+		errs = append(errs, err)
 	}
 	return c, errors.Join(errs...)
 }

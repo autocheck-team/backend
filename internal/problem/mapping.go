@@ -117,5 +117,6 @@ func testCaseToProto(tc TestCase) *v1.TestCase {
 		IsReady:           tc.IsReady,
 		InputSizeBytes:    tc.InputSize,
 		ExpectedSizeBytes: tc.ExpectedSize,
+		IsGenerated:       tc.IsGenerated,
 	}
 }

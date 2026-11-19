@@ -324,6 +324,8 @@ func (x *Problem) GetUpdateTime() *timestamppb.Timestamp {
 // TestCase — тест задания.
 type TestCase struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// Тест получен генерацией и явно принят автором.
+	IsGenerated bool `protobuf:"varint,11,opt,name=is_generated,json=isGenerated,proto3" json:"is_generated,omitempty"`
 	// Идентификатор (UUID).
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Задание (UUID).
@@ -376,6 +378,13 @@ func (x *TestCase) ProtoReflect() protoreflect.Message {
 // Deprecated: Use TestCase.ProtoReflect.Descriptor instead.
 func (*TestCase) Descriptor() ([]byte, []int) {
 	return file_autocheck_v1_problem_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *TestCase) GetIsGenerated() bool {
+	if x != nil {
+		return x.IsGenerated
+	}
+	return false
 }
 
 func (x *TestCase) GetId() string {
@@ -1647,8 +1656,9 @@ const file_autocheck_v1_problem_proto_rawDesc = "" +
 	"\vupdate_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampB\x04\xe2A\x01\x03R\n" +
 	"updateTime:\x93\x01\xbaH\x8f\x01\x1a\x8c\x01\n" +
 	"\x16float_epsilon_required\x12Dдля CHECKER_FLOAT нужна погрешность float_epsilon\x1a,this.checker != 3 || has(this.float_epsilon)B\x10\n" +
-	"\x0e_float_epsilon\"\xdf\x02\n" +
-	"\bTestCase\x12\x0e\n" +
+	"\x0e_float_epsilon\"\x82\x03\n" +
+	"\bTestCase\x12!\n" +
+	"\fis_generated\x18\v \x01(\bR\visGenerated\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
 	"problem_id\x18\x02 \x01(\tR\tproblemId\x12\x18\n" +

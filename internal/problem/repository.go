@@ -47,6 +47,7 @@ type Problem struct {
 
 // TestCase — тест задания.
 type TestCase struct {
+	IsGenerated  bool
 	ID           uuid.UUID
 	ProblemID    uuid.UUID
 	Ordinal      int32
@@ -290,12 +291,12 @@ func (r *Repository) CreateTestCase(ctx context.Context, tc TestCase) (TestCase,
 }
 
 const testCaseColumns = `id, problem_id, ordinal, is_sample, points, is_ready,
-	input_key, expected_key, input_size, expected_size`
+	input_key, expected_key, input_size, expected_size, is_generated`
 
 func scanTestCase(row pgx.Row) (TestCase, error) {
 	var tc TestCase
 	err := row.Scan(&tc.ID, &tc.ProblemID, &tc.Ordinal, &tc.IsSample, &tc.Points, &tc.IsReady,
-		&tc.InputKey, &tc.ExpectedKey, &tc.InputSize, &tc.ExpectedSize)
+		&tc.InputKey, &tc.ExpectedKey, &tc.InputSize, &tc.ExpectedSize, &tc.IsGenerated)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TestCase{}, ErrNotFound
 	}

@@ -184,6 +184,8 @@ message Problem {
 
 // TestCase — тест задания.
 message TestCase {
+  // Тест получен генерацией и явно принят автором.
+  bool is_generated = 11;
   // Идентификатор (UUID).
   string id = 1;
   // Задание (UUID).
