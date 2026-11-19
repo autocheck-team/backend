@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/autocheck-team/backend/internal/llm"
+	"github.com/autocheck-team/backend/internal/testgeneration"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/autocheck-team/backend/internal/config"
@@ -74,6 +76,10 @@ func run(log *slog.Logger) error {
 		Log: log, ID: cfg.WorkerID, Concurrency: cfg.WorkerConcurrency, PollInterval: cfg.WorkerPollInterval,
 	}
 	log.Info("worker started", "id", cfg.WorkerID, "concurrency", cfg.WorkerConcurrency)
+	model, err := llm.New(cfg.LLM)
+	if err != nil {
+		return err
+	}
 	playgroundWorker := playground.Worker{
 		Repository: playground.NewRepository(pool, cfg.PlaygroundQueryTimeout),
 		Runner:     playground.NewRunner(sb), Log: log, ID: cfg.WorkerID,
@@ -87,6 +93,12 @@ func run(log *slog.Logger) error {
 		return judge.ObserveQueue(ctx, repo, metrics, log, cfg.MetricsPollInterval, cfg.MetricsQueryTimeout)
 	})
 	group.Go(func() error { return metrics.Run(ctx, cfg.MetricsAddr, cfg.ShutdownTimeout) })
+	if model.Enabled() {
+		group.Go(func() error {
+			testgeneration.NewRepository(pool).Run(ctx, testgeneration.NewRunner(model, sb), cfg.WorkerConcurrency, cfg.WorkerPollInterval, func(err error) { log.ErrorContext(ctx, "test generation failed", "err", err) })
+			return nil
+		})
+	}
 	return group.Wait()
 }
 

@@ -8,6 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/autocheck-team/backend/internal/llm"
+	"github.com/autocheck-team/backend/internal/recommendation"
 )
 
 // Config — настройки api, worker и migrate.
@@ -15,6 +18,9 @@ type Config struct {
 	MetricsAddr                string
 	MetricsPollInterval        time.Duration
 	MetricsQueryTimeout        time.Duration
+	LLM                        llm.Config
+	Recommendation             recommendation.Config
+	RecommendationQueryTimeout time.Duration
 	HTTPAddr                   string
 	GRPCAddr                   string
 	DatabaseURL                string
@@ -81,6 +87,7 @@ func Load() (Config, error) {
 		}
 	}
 
+	c.LLM = llm.Config{BaseURL: getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1"), APIKey: os.Getenv("LLM_API_KEY"), Model: getenv("LLM_MODEL", "nvidia/nemotron-3.5-super-vl:free"), EmbeddingModel: getenv("LLM_EMBEDDING_MODEL", "nvidia/nemotron-3-embed-1b:free")}
 	var errs []error
 	if c.DatabaseURL == "" {
 		errs = append(errs, errors.New("DATABASE_URL is required"))
@@ -154,6 +161,41 @@ func Load() (Config, error) {
 			continue
 		}
 		*setting.target = duration
+	}
+	if c.LLM.Timeout, err = time.ParseDuration(getenv("LLM_TIMEOUT", "2m")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid llm timeout: %w", err))
+	}
+	if c.LLM.Retries, err = strconv.Atoi(getenv("LLM_RETRIES", "2")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid llm retries: %w", err))
+	}
+	if c.LLM.MaxTokens, err = strconv.Atoi(getenv("LLM_MAX_TOKENS", "8192")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid llm token limit: %w", err))
+	}
+	if c.LLM.MaxTokens <= 0 {
+		errs = append(errs, errors.New("LLM_MAX_TOKENS must be positive"))
+	}
+	if c.LLM.Timeout <= 0 {
+		errs = append(errs, errors.New("LLM_TIMEOUT must be positive"))
+	}
+	if _, err := llm.New(c.LLM); err != nil {
+		errs = append(errs, err)
+	}
+	c.Recommendation.EmbeddingModel = c.LLM.EmbeddingModel
+	c.Recommendation.ModelTimeout = c.LLM.Timeout
+	if c.Recommendation.DailyLimit, err = strconv.Atoi(getenv("RECOMMENDATION_DAILY_LIMIT", "30")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid recommendation daily limit: %w", err))
+	} else if c.Recommendation.DailyLimit < 1 {
+		errs = append(errs, errors.New("recommendation daily limit must be positive"))
+	}
+	if c.Recommendation.RefreshInterval, err = time.ParseDuration(getenv("RECOMMENDATION_REFRESH_INTERVAL", "1m")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid recommendation refresh interval: %w", err))
+	} else if c.Recommendation.RefreshInterval <= 0 {
+		errs = append(errs, errors.New("recommendation refresh interval must be positive"))
+	}
+	if c.RecommendationQueryTimeout, err = time.ParseDuration(getenv("RECOMMENDATION_QUERY_TIMEOUT", "5s")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid recommendation query timeout: %w", err))
+	} else if c.RecommendationQueryTimeout <= 0 {
+		errs = append(errs, errors.New("recommendation query timeout must be positive"))
 	}
 	return c, errors.Join(errs...)
 }

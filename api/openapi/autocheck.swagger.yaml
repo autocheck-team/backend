@@ -16,8 +16,12 @@ tags:
     description: PlaygroundService хранит личные мини-проекты и ставит их запуски в очередь воркера.
   - name: ProblemService
     description: ProblemService — задания, тест-кейсы и языки программирования.
+  - name: RecommendationService
+    description: RecommendationService подбирает опубликованные задания всем вошедшим пользователям бесплатно.
   - name: SubmissionService
     description: 'SubmissionService — посылки: отправка решений и их результаты.'
+  - name: TestGenerationService
+    description: TestGenerationService — черновики тестов, доступные автору задания и администратору.
 consumes:
   - application/json
 produces:
@@ -869,6 +873,111 @@ paths:
             $ref: '#/definitions/ProblemServiceConfirmTestCaseBody'
       tags:
         - ProblemService
+  /v1/problems/{problemId}/test-generations:
+    post:
+      summary: CreateTestGeneration резервирует дневную квоту Pro и запускает асинхронную генерацию.
+      operationId: TestGenerationService_CreateTestGeneration
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateTestGenerationResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: UUID задания.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/TestGenerationServiceCreateTestGenerationBody'
+      tags:
+        - TestGenerationService
+  /v1/problems/{problemId}/test-generations/{id}:
+    get:
+      summary: GetTestGeneration возвращает состояние и результаты без исходника эталона.
+      operationId: TestGenerationService_GetTestGeneration
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetTestGenerationResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: UUID задания.
+          in: path
+          required: true
+          type: string
+        - name: id
+          description: UUID генерации.
+          in: path
+          required: true
+          type: string
+      tags:
+        - TestGenerationService
+  /v1/problems/{problemId}/test-generations/{id}:accept:
+    post:
+      summary: AcceptTestGeneration включает выбранные черновики в обычные закрытые тесты; повтор безопасен.
+      operationId: TestGenerationService_AcceptTestGeneration
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1AcceptTestGenerationResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: UUID задания.
+          in: path
+          required: true
+          type: string
+        - name: id
+          description: UUID завершённой генерации.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/TestGenerationServiceAcceptTestGenerationBody'
+      tags:
+        - TestGenerationService
+  /v1/problems:recommend:
+    post:
+      summary: RecommendProblems возвращает до десяти заданий; дневная квота общая для всех тарифов.
+      operationId: RecommendationService_RecommendProblems
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1RecommendProblemsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: RecommendProblemsRequest содержит учебную цель, а не инструкции для модели.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1RecommendProblemsRequest'
+      tags:
+        - RecommendationService
   /v1/project-runs/{id}:
     get:
       summary: GetProjectRun возвращает состояние и результат своего запуска или любого для admin.
@@ -1287,6 +1396,35 @@ definitions:
         type: string
         description: 'Ключ идемпотентности (UUID): повтор запроса с тем же ключом не создаёт новую посылку.'
     description: CreateSubmissionRequest — отправка решения.
+  TestGenerationServiceAcceptTestGenerationBody:
+    type: object
+    properties:
+      testIds:
+        type: array
+        items:
+          type: string
+        description: UUID кандидатов; повтор выбора уже принятых безопасен.
+    description: AcceptTestGenerationRequest — выбор пригодных кандидатов.
+  TestGenerationServiceCreateTestGenerationBody:
+    type: object
+    properties:
+      requestId:
+        type: string
+        description: UUID идемпотентности в пределах пользователя, обязателен.
+      languageId:
+        type: string
+        description: Активный язык задания.
+      source:
+        type: string
+        description: Исходник эталона UTF-8, не более 64 КиБ.
+      testCount:
+        type: integer
+        format: int32
+        description: Число кандидатов от 1 до 20.
+      wishes:
+        type: string
+        description: Пожелания автора, пустое значение допустимо.
+    description: CreateTestGenerationRequest — данные эталона автора и ограничения генерации.
   protobufAny:
     type: object
     properties:
@@ -1306,6 +1444,13 @@ definitions:
         items:
           type: object
           $ref: '#/definitions/protobufAny'
+  v1AcceptTestGenerationResponse:
+    type: object
+    properties:
+      generation:
+        $ref: '#/definitions/v1TestGeneration'
+        description: Обновлённая генерация.
+    description: AcceptTestGenerationResponse — состояние с принятыми кандидатами.
   v1Checker:
     type: string
     enum:
@@ -1478,6 +1623,13 @@ definitions:
         format: date-time
         description: До какого момента действуют ссылки.
     description: CreateTestCaseResponse — созданный тест и ссылки для загрузки файлов.
+  v1CreateTestGenerationResponse:
+    type: object
+    properties:
+      generation:
+        $ref: '#/definitions/v1TestGeneration'
+        description: Генерация в очереди либо результат повторного запроса.
+    description: CreateTestGenerationResponse — сохранённая генерация.
   v1DeleteMaterialAttachmentResponse:
     type: object
     description: DeleteMaterialAttachmentResponse подтверждает удаление.
@@ -1561,6 +1713,30 @@ definitions:
        - FEEDBACK_REQUEST_TYPE_COMPILER_UPDATE: Обновление компилятора или версии языка.
        - FEEDBACK_REQUEST_TYPE_NEW_LIBRARY: Добавление библиотеки.
        - FEEDBACK_REQUEST_TYPE_OTHER: Остальные предложения.
+  v1GeneratedTest:
+    type: object
+    properties:
+      id:
+        type: string
+        description: UUID кандидата, совпадает с UUID принятого test_case.
+      input:
+        type: string
+        format: byte
+        description: Вход, пустой у отклонённого кандидата.
+      expected:
+        type: string
+        format: byte
+        description: Вывод эталона, пустой у отклонённого кандидата.
+      explanation:
+        type: string
+        description: Пояснение проверяемого случая.
+      rejectionReason:
+        type: string
+        description: Безопасная причина отбрасывания, пустая у пригодного теста.
+      isAccepted:
+        type: boolean
+        description: Кандидат уже включён в задание.
+    description: GeneratedTest — один кандидат; вход и вывод возвращаются как bytes (base64 в REST).
   v1GetCheckerUploadResponse:
     type: object
     properties:
@@ -1699,6 +1875,13 @@ definitions:
         type: string
         description: Исходный код.
     description: GetSubmissionSourceResponse — исходный код посылки.
+  v1GetTestGenerationResponse:
+    type: object
+    properties:
+      generation:
+        $ref: '#/definitions/v1TestGeneration'
+        description: Генерация с черновиками и причинами отказов.
+    description: GetTestGenerationResponse — актуальное состояние.
   v1Language:
     type: object
     properties:
@@ -1963,6 +2146,10 @@ definitions:
       hasMaterialAccess:
         type: boolean
         description: Доступ к учебным материалам платформы.
+      dailyTestGenerationLimit:
+        type: integer
+        format: int32
+        description: Максимум генераций за календарные сутки UTC; ноль запрещает генерации.
     description: Plan содержит цену в копейках и ограничения, ноль лимита означает отсутствие ограничения.
   v1Problem:
     type: object
@@ -2029,6 +2216,17 @@ definitions:
         description: Время последнего изменения.
         readOnly: true
     description: Problem — задание.
+  v1ProblemRecommendation:
+    type: object
+    properties:
+      problemId:
+        type: string
+        description: UUID задания из каталога.
+      score:
+        type: number
+        format: double
+        description: Косинусная близость [-1, 1]; при текстовом поиске — нормализованный ранг [0, 1].
+    description: ProblemRecommendation содержит только идентификатор существующего опубликованного задания.
   v1Project:
     type: object
     properties:
@@ -2136,6 +2334,42 @@ definitions:
        - PROJECT_RUN_STATUS_RUNNING: Выполняется.
        - PROJECT_RUN_STATUS_DONE: Программа завершена, включая CE, TL, ML и RE.
        - PROJECT_RUN_STATUS_FAILED: Три попытки завершились системной ошибкой.
+  v1RecommendProblemsRequest:
+    type: object
+    properties:
+      goal:
+        type: string
+        description: Чему пользователь хочет научиться; 1–1000 символов, не только пробелы.
+      languageId:
+        type: string
+        description: Разрешённый активный язык задания; пустое значение отключает фильтр.
+      difficulty:
+        type: string
+        description: Пожелание к сложности до 100 символов; семантическая подсказка, не строгий фильтр.
+      limit:
+        type: integer
+        format: int32
+        description: 'Число результатов: 0 означает 5, максимум 10. Продолжения списка нет.'
+    description: RecommendProblemsRequest содержит учебную цель, а не инструкции для модели.
+  v1RecommendProblemsResponse:
+    type: object
+    properties:
+      recommendations:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1ProblemRecommendation'
+        description: Задания по убыванию оценки; при равенстве — по UUID. Список может быть пустым.
+      explanation:
+        type: string
+        description: Одно общее объяснение до 500 символов; пустое при недоступной LLM или отсутствии результатов.
+      isTextFallback:
+        type: boolean
+        description: Истина, если применён текстовый поиск вместо эмбеддингов.
+      fallbackMessage:
+        type: string
+        description: Безопасное пояснение деградации для пользователя; иначе пустое.
+    description: RecommendProblemsResponse явно сообщает о деградации до текстового поиска.
   v1ReportText:
     type: object
     properties:
@@ -2287,6 +2521,9 @@ definitions:
   v1TestCase:
     type: object
     properties:
+      isGenerated:
+        type: boolean
+        description: Тест получен генерацией и явно принят автором.
       id:
         type: string
         description: Идентификатор (UUID).
@@ -2322,6 +2559,53 @@ definitions:
         type: string
         description: Временная ссылка на скачивание эталонного вывода. Пустая, если тест не загружен.
     description: TestCase — тест задания.
+  v1TestGeneration:
+    type: object
+    properties:
+      id:
+        type: string
+        description: UUID генерации.
+      problemId:
+        type: string
+        description: UUID задания.
+      status:
+        $ref: '#/definitions/v1TestGenerationStatus'
+        description: Этап обработки.
+      tests:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1GeneratedTest'
+        description: Кандидаты в порядке генерации.
+      error:
+        type: string
+        description: Безопасная причина общей ошибки, без ответа LLM или исходника.
+      createTime:
+        type: string
+        format: date-time
+        description: Время постановки в очередь.
+      updateTime:
+        type: string
+        format: date-time
+        description: Время последнего изменения.
+    description: TestGeneration — состояние генерации, максимум 20 кандидатов.
+  v1TestGenerationStatus:
+    type: string
+    enum:
+      - TEST_GENERATION_STATUS_UNSPECIFIED
+      - TEST_GENERATION_STATUS_QUEUED
+      - TEST_GENERATION_STATUS_RUNNING
+      - TEST_GENERATION_STATUS_DONE
+      - TEST_GENERATION_STATUS_FAILED
+    default: TEST_GENERATION_STATUS_UNSPECIFIED
+    description: |-
+      TestGenerationStatus — этап обработки.
+
+       - TEST_GENERATION_STATUS_UNSPECIFIED: Не задан.
+       - TEST_GENERATION_STATUS_QUEUED: Ожидает воркера.
+       - TEST_GENERATION_STATUS_RUNNING: LLM и песочница обрабатывают задание.
+       - TEST_GENERATION_STATUS_DONE: Черновики готовы, включая возможные отказы отдельных входов.
+       - TEST_GENERATION_STATUS_FAILED: Обработка завершилась ошибкой.
   v1TestRun:
     type: object
     properties:

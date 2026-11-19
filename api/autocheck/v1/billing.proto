@@ -61,6 +61,8 @@ message Plan {
   int32 monthly_test_run_limit = 7;
   // Доступ к учебным материалам платформы.
   bool has_material_access = 8;
+  // Максимум генераций за календарные сутки UTC; ноль запрещает генерации.
+  int32 daily_test_generation_limit = 9;
 }
 
 // ListPlansRequest запрашивает небольшой каталог тарифов целиком.

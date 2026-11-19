@@ -40,13 +40,15 @@ type Config struct {
 
 // Services — реализации gRPC-сервисов.
 type Services struct {
-	User       v1.UserServiceServer
-	Problem    v1.ProblemServiceServer
-	Submission v1.SubmissionServiceServer
-	Feedback   v1.FeedbackServiceServer
-	Billing    v1.BillingServiceServer
-	Material   v1.MaterialServiceServer
-	Playground v1.PlaygroundServiceServer
+	User           v1.UserServiceServer
+	Problem        v1.ProblemServiceServer
+	Submission     v1.SubmissionServiceServer
+	Feedback       v1.FeedbackServiceServer
+	Billing        v1.BillingServiceServer
+	Material       v1.MaterialServiceServer
+	Playground     v1.PlaygroundServiceServer
+	TestGeneration v1.TestGenerationServiceServer
+	Recommendation v1.RecommendationServiceServer
 }
 
 // Server — gRPC-сервер и HTTP-шлюз.
@@ -101,6 +103,12 @@ func New(
 		v1.RegisterPlaygroundServiceServer(g, svc.Playground)
 	}
 
+	if svc.TestGeneration != nil {
+		v1.RegisterTestGenerationServiceServer(g, svc.TestGeneration)
+	}
+	if svc.Recommendation != nil {
+		v1.RegisterRecommendationServiceServer(g, svc.Recommendation)
+	}
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(g, hs)
 	reflection.Register(g)
@@ -128,7 +136,8 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Шлюз ходит в собственный gRPC-сервер по сети, а не вызывает сервисы напрямую,
 	// чтобы REST-запросы проходили через те же интерсепторы (авторизация, валидация).
-	conn, err := grpc.NewClient(dialTarget(lis.Addr()), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(dialTarget(lis.Addr()), grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(48<<20)))
 	if err != nil {
 		return fmt.Errorf("dial grpc: %w", err)
 	}
@@ -143,6 +152,8 @@ func (s *Server) Run(ctx context.Context) error {
 		v1.RegisterBillingServiceHandler,
 		v1.RegisterMaterialServiceHandler,
 		v1.RegisterPlaygroundServiceHandler,
+		v1.RegisterTestGenerationServiceHandler,
+		v1.RegisterRecommendationServiceHandler,
 	} {
 		if err := register(ctx, gw, conn); err != nil {
 			return fmt.Errorf("register gateway: %w", err)

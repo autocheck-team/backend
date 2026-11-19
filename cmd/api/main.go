@@ -17,12 +17,15 @@ import (
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
 	"github.com/autocheck-team/backend/internal/feedback"
+	"github.com/autocheck-team/backend/internal/llm"
 	"github.com/autocheck-team/backend/internal/material"
 	"github.com/autocheck-team/backend/internal/playground"
 	"github.com/autocheck-team/backend/internal/problem"
+	"github.com/autocheck-team/backend/internal/recommendation"
 	"github.com/autocheck-team/backend/internal/server"
 	"github.com/autocheck-team/backend/internal/storage"
 	"github.com/autocheck-team/backend/internal/submission"
+	"github.com/autocheck-team/backend/internal/testgeneration"
 	"github.com/autocheck-team/backend/internal/user"
 
 	"github.com/autocheck-team/backend/internal/monitoring"
@@ -97,6 +100,12 @@ func run(log *slog.Logger) error {
 	billingService := billing.NewService(billingRepository, paymentProvider, log)
 	submissionService := submission.NewService(submission.NewRepository(pool), objects, events)
 	submissionService.Metrics = metrics
+	model, err := llm.New(cfg.LLM)
+	if err != nil {
+		return err
+	}
+	recommendations := recommendation.New(
+		recommendation.NewRepository(pool, cfg.RecommendationQueryTimeout), model, validator, cfg.Recommendation)
 	srv := server.New(server.Config{
 		GRPCAddr:           cfg.GRPCAddr,
 		Metrics:            metrics,
@@ -108,15 +117,21 @@ func run(log *slog.Logger) error {
 		Material: material.New(material.NewRepository(pool, cfg.MaterialQueryTimeout), billingRepository, objects, validator, material.Config{
 			MaxAttachmentBytes: cfg.MaterialMaxAttachmentBytes, ObjectTimeout: cfg.MaterialObjectTimeout,
 		}),
-		Billing:    billingService,
-		Problem:    problem.NewService(problem.NewRepository(pool), objects, validator),
-		Submission: submissionService,
-		Playground: playground.New(playground.NewRepository(pool, cfg.PlaygroundQueryTimeout), validator),
-		Feedback:   feedback.NewService(feedback.NewRepository(pool, cfg.FeedbackQueryTimeout), validator),
+		Billing:        billingService,
+		Problem:        problem.NewService(problem.NewRepository(pool), objects, validator),
+		Submission:     submissionService,
+		Playground:     playground.New(playground.NewRepository(pool, cfg.PlaygroundQueryTimeout), validator),
+		Feedback:       feedback.NewService(feedback.NewRepository(pool, cfg.FeedbackQueryTimeout), validator),
+		TestGeneration: testgeneration.New(testgeneration.NewRepository(pool), objects, validator, cfg.LLM.APIKey != ""),
+		Recommendation: recommendations,
 	})
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error { return srv.Run(ctx) })
 	group.Go(func() error { return metrics.Run(ctx, cfg.MetricsAddr, cfg.ShutdownTimeout) })
 	group.Go(func() error { return billingService.RunSync(ctx, cfg.BillingSyncInterval) })
+	group.Go(func() error {
+		recommendations.Run(ctx, func(err error) { log.ErrorContext(ctx, "problem embedding refresh failed", "err", err) })
+		return nil
+	})
 	return group.Wait()
 }
