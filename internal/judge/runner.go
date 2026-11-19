@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/autocheck-team/backend/internal/sandbox"
+
+	"github.com/autocheck-team/backend/internal/monitoring"
 )
 
 // ErrNoTests не лечится ретраем: автор должен загрузить тесты.
@@ -56,6 +58,8 @@ type Runs interface {
 
 // Runner выполняет одну попытку; повторами и арендой управляет Worker.
 type Runner struct {
+	// Metrics измеряет стадии и уборку без меток с ID.
+	Metrics *monitoring.Metrics
 	repo    Runs
 	objects Objects
 	sandbox Sandbox
@@ -99,7 +103,8 @@ func (r *Runner) workspace(ctx context.Context) (Workspace, error) {
 	return r.sandbox.NewWorkspace(ctx)
 }
 
-func closeWorkspace(ctx context.Context, w Workspace) error {
+func (r *Runner) closeWorkspace(ctx context.Context, w Workspace) (closeErr error) {
+	defer func() { r.Metrics.Cleanup("workspace", closeErr) }()
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	if err := w.Close(ctx); err != nil {
@@ -108,7 +113,9 @@ func closeWorkspace(ctx context.Context, w Workspace) error {
 	return nil
 }
 
-func runWorkspace(ctx context.Context, w Workspace, spec sandbox.RunSpec) (sandbox.Result, error) {
+func (r *Runner) runWorkspace(ctx context.Context, stage string, w Workspace, spec sandbox.RunSpec) (sandbox.Result, error) {
+	started := time.Now()
+	defer func() { r.Metrics.Stage(stage, time.Since(started)) }()
 	// Внешний deadline покрывает также создание/копирование/удаление контейнера.
 	ctx, cancel := context.WithTimeout(ctx, spec.TimeLimit+20*time.Second)
 	defer cancel()
@@ -139,12 +146,12 @@ func (r *Runner) Run(ctx context.Context, j Job) (outcome Outcome, runErr error)
 		return Outcome{}, fmt.Errorf("create solution workspace: %w", err)
 	}
 	defer func() {
-		runErr = errors.Join(runErr, closeWorkspace(ctx, ws))
+		runErr = errors.Join(runErr, r.closeWorkspace(ctx, ws))
 	}()
 	ws.AddFile(task.Language.SourceFile, source, 0o644)
 	outcome = Outcome{Verdict: "OK"}
 	if len(task.Language.CompileCmd) > 0 {
-		result, err := runWorkspace(ctx, ws, sandbox.RunSpec{
+		result, err := r.runWorkspace(ctx, "compile", ws, sandbox.RunSpec{
 			Image: task.Language.Image, Cmd: task.Language.CompileCmd,
 			Env: task.Language.CompileEnv, TimeLimit: 30 * time.Second, MemoryBytes: 1 << 30, PidsLimit: 256,
 		})
@@ -193,7 +200,7 @@ func (r *Runner) Run(ctx context.Context, j Job) (outcome Outcome, runErr error)
 		if err != nil {
 			return Outcome{}, err
 		}
-		res, err := runWorkspace(ctx, ws, sandbox.RunSpec{
+		res, err := r.runWorkspace(ctx, "run", ws, sandbox.RunSpec{
 			Image: task.Language.Image, Cmd: task.Language.RunCmd,
 			Stdin: input, TimeLimit: timeLimit, MemoryBytes: memory, PidsLimit: 256,
 		})
@@ -259,13 +266,13 @@ func (r *Runner) custom(ctx context.Context, checker, input, expected, actual []
 		return "", fmt.Errorf("create checker workspace: %w", err)
 	}
 	defer func() {
-		runErr = errors.Join(runErr, closeWorkspace(ctx, ws))
+		runErr = errors.Join(runErr, r.closeWorkspace(ctx, ws))
 	}()
 	ws.AddFile("checker.py", checker, 0o644)
 	ws.AddFile("input", input, 0o644)
 	ws.AddFile("expected", expected, 0o644)
 	ws.AddFile("output", actual, 0o644)
-	res, err := runWorkspace(ctx, ws, sandbox.RunSpec{
+	res, err := r.runWorkspace(ctx, "run", ws, sandbox.RunSpec{
 		Image: "python:3.14-alpine", Cmd: []string{"python3", "checker.py", "input", "expected", "output"},
 		TimeLimit: 10 * time.Second, MemoryBytes: 256 << 20, PidsLimit: 256,
 	})

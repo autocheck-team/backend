@@ -8,15 +8,30 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/autocheck-team/backend/internal/llm"
+	"github.com/autocheck-team/backend/internal/recommendation"
 )
 
 // Config — настройки api, worker и migrate.
 type Config struct {
-	HTTPAddr             string
-	GRPCAddr             string
-	DatabaseURL          string
-	ShutdownTimeout      time.Duration
-	FeedbackQueryTimeout time.Duration
+	MetricsAddr                string
+	MetricsPollInterval        time.Duration
+	MetricsQueryTimeout        time.Duration
+	LLM                        llm.Config
+	Recommendation             recommendation.Config
+	RecommendationQueryTimeout time.Duration
+	HTTPAddr                   string
+	GRPCAddr                   string
+	DatabaseURL                string
+	ShutdownTimeout            time.Duration
+	FeedbackQueryTimeout       time.Duration
+	MaterialQueryTimeout       time.Duration
+	MaterialObjectTimeout      time.Duration
+	MaterialMaxAttachmentBytes int64
+	PlaygroundQueryTimeout     time.Duration
+	HintTimeout                time.Duration
+	HintQueryTimeout           time.Duration
 
 	S3Endpoint string
 	// S3PublicEndpoint — адрес хранилища для браузера (presigned-ссылки).
@@ -52,6 +67,7 @@ func Load() (Config, error) {
 		YookassaShopID:    os.Getenv("YOOKASSA_SHOP_ID"),
 		YookassaSecretKey: os.Getenv("YOOKASSA_SECRET_KEY"),
 		YookassaAPIURL:    getenv("YOOKASSA_API_URL", "https://api.yookassa.ru/v3"),
+		MetricsAddr:       getenv("METRICS_ADDR", ":9100"),
 		HTTPAddr:          getenv("HTTP_ADDR", ":8080"),
 		GRPCAddr:          getenv("GRPC_ADDR", ":9090"),
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
@@ -73,7 +89,21 @@ func Load() (Config, error) {
 		}
 	}
 
+	c.LLM = llm.Config{BaseURL: getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1"), APIKey: os.Getenv("LLM_API_KEY"), Model: getenv("LLM_MODEL", "nvidia/nemotron-3.5-super-vl:free"), EmbeddingModel: getenv("LLM_EMBEDDING_MODEL", "nvidia/nemotron-3-embed-1b:free")}
 	var errs []error
+	for _, setting := range []struct {
+		name, fallback string
+		target         *time.Duration
+	}{
+		{"HINT_TIMEOUT", "5m", &c.HintTimeout},
+		{"HINT_QUERY_TIMEOUT", "5s", &c.HintQueryTimeout},
+	} {
+		duration, parseErr := time.ParseDuration(getenv(setting.name, setting.fallback))
+		if parseErr != nil || duration <= 0 {
+			errs = append(errs, fmt.Errorf("invalid positive duration for %s", setting.name))
+		}
+		*setting.target = duration
+	}
 	if c.DatabaseURL == "" {
 		errs = append(errs, errors.New("DATABASE_URL is required"))
 	}
@@ -86,6 +116,26 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("invalid feedback query timeout: %w", err))
 	} else if c.FeedbackQueryTimeout <= 0 {
 		errs = append(errs, errors.New("feedback query timeout must be positive"))
+	}
+	if c.MaterialQueryTimeout, err = time.ParseDuration(getenv("MATERIAL_QUERY_TIMEOUT", "5s")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid material query timeout: %w", err))
+	} else if c.MaterialQueryTimeout <= 0 {
+		errs = append(errs, errors.New("material query timeout must be positive"))
+	}
+	if c.MaterialObjectTimeout, err = time.ParseDuration(getenv("MATERIAL_OBJECT_TIMEOUT", "30s")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid material object timeout: %w", err))
+	} else if c.MaterialObjectTimeout <= 0 {
+		errs = append(errs, errors.New("material object timeout must be positive"))
+	}
+	if c.MaterialMaxAttachmentBytes, err = strconv.ParseInt(getenv("MATERIAL_MAX_ATTACHMENT_BYTES", "10485760"), 10, 64); err != nil {
+		errs = append(errs, fmt.Errorf("invalid material attachment limit: %w", err))
+	} else if c.MaterialMaxAttachmentBytes <= 0 || c.MaterialMaxAttachmentBytes > 64<<20 {
+		errs = append(errs, errors.New("material attachment limit must be between 1 and 67108864 bytes"))
+	}
+	if c.PlaygroundQueryTimeout, err = time.ParseDuration(getenv("PLAYGROUND_QUERY_TIMEOUT", "5s")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid playground query timeout: %w", err))
+	} else if c.PlaygroundQueryTimeout <= 0 {
+		errs = append(errs, errors.New("playground query timeout must be positive"))
 	}
 	if c.WorkerConcurrency, err = strconv.Atoi(getenv("WORKER_CONCURRENCY", "2")); err != nil {
 		errs = append(errs, fmt.Errorf("WORKER_CONCURRENCY: %w", err))
@@ -107,6 +157,60 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("BILLING_SYNC_INTERVAL: %w", err))
 	} else if c.BillingSyncInterval <= 0 {
 		errs = append(errs, errors.New("BILLING_SYNC_INTERVAL must be positive"))
+	}
+	for _, setting := range []struct {
+		name     string
+		fallback string
+		target   *time.Duration
+	}{
+		{"METRICS_POLL_INTERVAL", "5s", &c.MetricsPollInterval},
+		{"METRICS_QUERY_TIMEOUT", "3s", &c.MetricsQueryTimeout},
+	} {
+		duration, parseErr := time.ParseDuration(getenv(setting.name, setting.fallback))
+		if parseErr != nil {
+			errs = append(errs, fmt.Errorf("parse %s: %w", setting.name, parseErr))
+			continue
+		}
+		if duration <= 0 {
+			errs = append(errs, fmt.Errorf("%s must be positive", setting.name))
+			continue
+		}
+		*setting.target = duration
+	}
+	if c.LLM.Timeout, err = time.ParseDuration(getenv("LLM_TIMEOUT", "2m")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid llm timeout: %w", err))
+	}
+	if c.LLM.Retries, err = strconv.Atoi(getenv("LLM_RETRIES", "2")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid llm retries: %w", err))
+	}
+	if c.LLM.MaxTokens, err = strconv.Atoi(getenv("LLM_MAX_TOKENS", "8192")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid llm token limit: %w", err))
+	}
+	if c.LLM.MaxTokens <= 0 {
+		errs = append(errs, errors.New("LLM_MAX_TOKENS must be positive"))
+	}
+	if c.LLM.Timeout <= 0 {
+		errs = append(errs, errors.New("LLM_TIMEOUT must be positive"))
+	}
+	if _, err := llm.New(c.LLM); err != nil {
+		errs = append(errs, err)
+	}
+	c.Recommendation.EmbeddingModel = c.LLM.EmbeddingModel
+	c.Recommendation.ModelTimeout = c.LLM.Timeout
+	if c.Recommendation.DailyLimit, err = strconv.Atoi(getenv("RECOMMENDATION_DAILY_LIMIT", "30")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid recommendation daily limit: %w", err))
+	} else if c.Recommendation.DailyLimit < 1 {
+		errs = append(errs, errors.New("recommendation daily limit must be positive"))
+	}
+	if c.Recommendation.RefreshInterval, err = time.ParseDuration(getenv("RECOMMENDATION_REFRESH_INTERVAL", "1m")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid recommendation refresh interval: %w", err))
+	} else if c.Recommendation.RefreshInterval <= 0 {
+		errs = append(errs, errors.New("recommendation refresh interval must be positive"))
+	}
+	if c.RecommendationQueryTimeout, err = time.ParseDuration(getenv("RECOMMENDATION_QUERY_TIMEOUT", "5s")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid recommendation query timeout: %w", err))
+	} else if c.RecommendationQueryTimeout <= 0 {
+		errs = append(errs, errors.New("recommendation query timeout must be positive"))
 	}
 	return c, errors.Join(errs...)
 }

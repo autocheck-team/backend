@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package autocheck.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+// TestGenerationService — черновики тестов, доступные автору задания и администратору.
+service TestGenerationService {
+  // CreateTestGeneration резервирует дневную квоту Pro и запускает асинхронную генерацию.
+  rpc CreateTestGeneration(CreateTestGenerationRequest) returns (CreateTestGenerationResponse) {
+    option (google.api.http) = {
+      post: "/v1/problems/{problem_id}/test-generations"
+      body: "*"
+    };
+  }
+  // GetTestGeneration возвращает состояние и результаты без исходника эталона.
+  rpc GetTestGeneration(GetTestGenerationRequest) returns (GetTestGenerationResponse) {
+    option (google.api.http) = {get: "/v1/problems/{problem_id}/test-generations/{id}"};
+  }
+  // AcceptTestGeneration включает выбранные черновики в обычные закрытые тесты; повтор безопасен.
+  rpc AcceptTestGeneration(AcceptTestGenerationRequest) returns (AcceptTestGenerationResponse) {
+    option (google.api.http) = {
+      post: "/v1/problems/{problem_id}/test-generations/{id}:accept"
+      body: "*"
+    };
+  }
+}
+
+// TestGenerationStatus — этап обработки.
+enum TestGenerationStatus {
+  // Не задан.
+  TEST_GENERATION_STATUS_UNSPECIFIED = 0;
+  // Ожидает воркера.
+  TEST_GENERATION_STATUS_QUEUED = 1;
+  // LLM и песочница обрабатывают задание.
+  TEST_GENERATION_STATUS_RUNNING = 2;
+  // Черновики готовы, включая возможные отказы отдельных входов.
+  TEST_GENERATION_STATUS_DONE = 3;
+  // Обработка завершилась ошибкой.
+  TEST_GENERATION_STATUS_FAILED = 4;
+}
+
+// GeneratedTest — один кандидат; вход и вывод возвращаются как bytes (base64 в REST).
+message GeneratedTest {
+  // UUID кандидата, совпадает с UUID принятого test_case.
+  string id = 1;
+  // Вход, пустой у отклонённого кандидата.
+  bytes input = 2;
+  // Вывод эталона, пустой у отклонённого кандидата.
+  bytes expected = 3;
+  // Пояснение проверяемого случая.
+  string explanation = 4;
+  // Безопасная причина отбрасывания, пустая у пригодного теста.
+  string rejection_reason = 5;
+  // Кандидат уже включён в задание.
+  bool is_accepted = 6;
+}
+
+// TestGeneration — состояние генерации, максимум 20 кандидатов.
+message TestGeneration {
+  // UUID генерации.
+  string id = 1;
+  // UUID задания.
+  string problem_id = 2;
+  // Этап обработки.
+  TestGenerationStatus status = 3;
+  // Кандидаты в порядке генерации.
+  repeated GeneratedTest tests = 4;
+  // Безопасная причина общей ошибки, без ответа LLM или исходника.
+  string error = 5;
+  // Время постановки в очередь.
+  google.protobuf.Timestamp create_time = 6;
+  // Время последнего изменения.
+  google.protobuf.Timestamp update_time = 7;
+}
+
+// CreateTestGenerationRequest — данные эталона автора и ограничения генерации.
+message CreateTestGenerationRequest {
+  // UUID задания.
+  string problem_id = 1 [(buf.validate.field).string.uuid = true];
+  // UUID идемпотентности в пределах пользователя, обязателен.
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  // Активный язык задания.
+  string language_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  // Исходник эталона UTF-8, не более 64 КиБ.
+  string source = 4 [(buf.validate.field).string = {
+    min_bytes: 1
+    max_bytes: 65536
+  }];
+  // Число кандидатов от 1 до 20.
+  int32 test_count = 5 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 20
+  }];
+  // Пожелания автора, пустое значение допустимо.
+  string wishes = 6 [(buf.validate.field).string.max_len = 4000];
+}
+
+// CreateTestGenerationResponse — сохранённая генерация.
+message CreateTestGenerationResponse {
+  // Генерация в очереди либо результат повторного запроса.
+  TestGeneration generation = 1;
+}
+
+// GetTestGenerationRequest — поиск в пределах задания.
+message GetTestGenerationRequest {
+  // UUID задания.
+  string problem_id = 1 [(buf.validate.field).string.uuid = true];
+  // UUID генерации.
+  string id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// GetTestGenerationResponse — актуальное состояние.
+message GetTestGenerationResponse {
+  // Генерация с черновиками и причинами отказов.
+  TestGeneration generation = 1;
+}
+
+// AcceptTestGenerationRequest — выбор пригодных кандидатов.
+message AcceptTestGenerationRequest {
+  // UUID задания.
+  string problem_id = 1 [(buf.validate.field).string.uuid = true];
+  // UUID завершённой генерации.
+  string id = 2 [(buf.validate.field).string.uuid = true];
+  // UUID кандидатов; повтор выбора уже принятых безопасен.
+  repeated string test_ids = 3 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 20
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+// AcceptTestGenerationResponse — состояние с принятыми кандидатами.
+message AcceptTestGenerationResponse {
+  // Обновлённая генерация.
+  TestGeneration generation = 1;
+}

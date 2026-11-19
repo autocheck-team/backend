@@ -15,6 +15,12 @@ func TestLoadDefaults(t *testing.T) {
 	if c.YookassaAPIURL != "https://api.yookassa.ru/v3" || c.YookassaTimeout != 10*time.Second || c.BillingSyncInterval != 30*time.Second {
 		t.Fatalf("unexpected billing defaults")
 	}
+	if c.MetricsAddr != ":9100" || c.MetricsPollInterval != 5*time.Second || c.MetricsQueryTimeout != 3*time.Second {
+		t.Fatal("unexpected monitoring defaults")
+	}
+	if c.MaterialQueryTimeout != 5*time.Second || c.MaterialObjectTimeout != 30*time.Second || c.MaterialMaxAttachmentBytes != 10485760 {
+		t.Fatal("unexpected material defaults")
+	}
 	if c.HTTPAddr != ":8080" {
 		t.Errorf("HTTPAddr = %q, want :8080", c.HTTPAddr)
 	}
@@ -31,12 +37,25 @@ func TestLoadErrors(t *testing.T) {
 		name string
 		env  map[string]string
 	}{
+		{"invalid_metrics_interval", map[string]string{"DATABASE_URL": "x", "METRICS_POLL_INTERVAL": "invalid"}},
+		{"zero_metrics_interval", map[string]string{"DATABASE_URL": "x", "METRICS_POLL_INTERVAL": "0s"}},
+		{"negative_metrics_timeout", map[string]string{"DATABASE_URL": "x", "METRICS_QUERY_TIMEOUT": "-1s"}},
+		{"bad_material_query_timeout", map[string]string{"DATABASE_URL": "x", "MATERIAL_QUERY_TIMEOUT": "bad"}},
+		{"zero_material_query_timeout", map[string]string{"DATABASE_URL": "x", "MATERIAL_QUERY_TIMEOUT": "0s"}},
+		{"bad_material_object_timeout", map[string]string{"DATABASE_URL": "x", "MATERIAL_OBJECT_TIMEOUT": "bad"}},
+		{"zero_material_object_timeout", map[string]string{"DATABASE_URL": "x", "MATERIAL_OBJECT_TIMEOUT": "0s"}},
+		{"bad_material_limit", map[string]string{"DATABASE_URL": "x", "MATERIAL_MAX_ATTACHMENT_BYTES": "bad"}},
+		{"zero_material_limit", map[string]string{"DATABASE_URL": "x", "MATERIAL_MAX_ATTACHMENT_BYTES": "0"}},
+		{"excessive_material_limit", map[string]string{"DATABASE_URL": "x", "MATERIAL_MAX_ATTACHMENT_BYTES": "67108865"}},
 		{"missing database url", map[string]string{"DATABASE_URL": ""}},
 		{"bad shutdown timeout", map[string]string{"DATABASE_URL": "x", "SHUTDOWN_TIMEOUT": "soon"}},
 		{"bad yookassa timeout", map[string]string{"DATABASE_URL": "x", "YOOKASSA_TIMEOUT": "no"}},
 		{"zero yookassa timeout", map[string]string{"DATABASE_URL": "x", "YOOKASSA_TIMEOUT": "0s"}},
 		{"bad billing interval", map[string]string{"DATABASE_URL": "x", "BILLING_SYNC_INTERVAL": "0s"}},
 		{"bad concurrency", map[string]string{"DATABASE_URL": "x", "WORKER_CONCURRENCY": "0"}},
+		{"bad_playground_timeout", map[string]string{"DATABASE_URL": "x", "PLAYGROUND_QUERY_TIMEOUT": "soon"}},
+		{"zero_playground_timeout", map[string]string{"DATABASE_URL": "x", "PLAYGROUND_QUERY_TIMEOUT": "0s"}},
+		{"negative_playground_timeout", map[string]string{"DATABASE_URL": "x", "PLAYGROUND_QUERY_TIMEOUT": "-1s"}},
 		{"bad_feedback_timeout", map[string]string{"DATABASE_URL": "x", "FEEDBACK_QUERY_TIMEOUT": "soon"}},
 		{"zero_feedback_timeout", map[string]string{"DATABASE_URL": "x", "FEEDBACK_QUERY_TIMEOUT": "0s"}},
 		{"negative_feedback_timeout", map[string]string{"DATABASE_URL": "x", "FEEDBACK_QUERY_TIMEOUT": "-1s"}},
@@ -50,5 +69,65 @@ func TestLoadErrors(t *testing.T) {
 				t.Fatal("Load: expected error")
 			}
 		})
+	}
+}
+
+func TestLLMConfig(t *testing.T) {
+	// arrange
+	t.Setenv("DATABASE_URL", "postgres://localhost/autocheck")
+	t.Setenv("LLM_API_KEY", "")
+	t.Setenv("LLM_BASE_URL", "")
+	t.Setenv("LLM_MODEL", "")
+	t.Setenv("LLM_EMBEDDING_MODEL", "")
+	// act
+	cfg, err := Load()
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LLM.Model != "nvidia/nemotron-3.5-super-vl:free" || cfg.LLM.EmbeddingModel != "nvidia/nemotron-3-embed-1b:free" || cfg.LLM.MaxTokens != 8192 || cfg.LLM.Retries != 2 || cfg.LLM.Timeout != 2*time.Minute {
+		t.Fatal("unexpected LLM defaults")
+	}
+	for _, tc := range []struct{ name, key, value string }{
+		{"bad_timeout", "LLM_TIMEOUT", "bad"},
+		{"zero_timeout", "LLM_TIMEOUT", "0s"},
+		{"negative_timeout", "LLM_TIMEOUT", "-1s"},
+		{"bad_retries", "LLM_RETRIES", "bad"},
+		{"negative_retries", "LLM_RETRIES", "-1"},
+		{"excess_retries", "LLM_RETRIES", "6"},
+		{"bad_tokens", "LLM_MAX_TOKENS", "bad"},
+		{"zero_tokens", "LLM_MAX_TOKENS", "0"},
+		{"negative_tokens", "LLM_MAX_TOKENS", "-1"},
+		{"invalid_url", "LLM_BASE_URL", "file:///tmp/llm"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(tc.key, tc.value)
+			if _, err := Load(); err == nil {
+				t.Fatal("invalid LLM configuration accepted")
+			}
+		})
+	}
+}
+
+func TestHintConfig(t *testing.T) {
+	// arrange
+	t.Setenv("DATABASE_URL", "postgres://localhost/autocheck")
+	t.Setenv("HINT_TIMEOUT", "")
+	t.Setenv("HINT_QUERY_TIMEOUT", "")
+	// act
+	cfg, err := Load()
+	// assert
+	if err != nil || cfg.HintTimeout != 5*time.Minute || cfg.HintQueryTimeout != 5*time.Second {
+		t.Fatalf("invalid hint defaults: %v", err)
+	}
+	for _, key := range []string{"HINT_TIMEOUT", "HINT_QUERY_TIMEOUT"} {
+		for _, value := range []string{"0s", "-1s", "bad"} {
+			t.Run(key+"_"+value, func(t *testing.T) {
+				t.Setenv(key, value)
+				if _, err := Load(); err == nil {
+					t.Fatal("invalid hint timeout accepted")
+				}
+			})
+		}
 	}
 }

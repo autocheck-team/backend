@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/autocheck-team/backend/internal/monitoring"
 )
 
 // Queue — операции аренды и завершения, независимые от выполнения программы.
@@ -27,6 +29,8 @@ type Executor interface {
 
 // Worker обслуживает пул горутин, не оставляя работающих проверок после остановки.
 type Worker struct {
+	// Metrics необязателен для встроенных запусков без экспортера.
+	Metrics           *monitoring.Metrics
 	Queue             Queue
 	Runner            Executor
 	Log               *slog.Logger
@@ -66,6 +70,10 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 func (w *Worker) process(parent context.Context, j Job) {
+	finishMetrics := w.Metrics.BeginAttempt()
+	defer finishMetrics()
+	log := w.Log.With("submission_id", j.SubmissionID, "job", j.ID, "attempt", j.Attempts)
+	log.Info("judging started")
 	ctx, cancel := context.WithCancel(parent)
 	heartbeatDone := make(chan struct{})
 	go func() {
@@ -82,7 +90,7 @@ func (w *Worker) process(parent context.Context, j Job) {
 				return
 			case <-ticker.C:
 				if err := w.Queue.Heartbeat(ctx, j); err != nil {
-					w.Log.Warn("job lease renewal failed", "job", j.ID, "err", err)
+					log.Warn("job lease renewal failed", "err", err)
 					cancel()
 					return
 				}
@@ -96,7 +104,7 @@ func (w *Worker) process(parent context.Context, j Job) {
 			cleanup, stop := context.WithTimeout(context.WithoutCancel(parent), 10*time.Second)
 			defer stop()
 			if err := w.Queue.Release(cleanup, j); err != nil && !errors.Is(err, ErrLeaseLost) {
-				w.Log.Error("release job", "job", j.ID, "err", err)
+				log.Error("release job", "err", err)
 			}
 		}
 	}()
@@ -110,14 +118,25 @@ func (w *Worker) process(parent context.Context, j Job) {
 	if ctx.Err() == nil {
 		if err == nil {
 			err = w.Queue.Finish(ctx, j, outcome)
+			if err == nil {
+				w.Metrics.Verdict(outcome.Verdict)
+				log.Info("judging completed", "verdict", outcome.Verdict)
+			}
 		}
 		// Ошибка фиксации тоже системная: если БД снова доступна, планируем обычный
 		// backoff, иначе аренда истечёт и задание подхватит другой воркер.
 		if err != nil && !errors.Is(err, ErrLeaseLost) && ctx.Err() == nil {
-			err = w.Queue.Fail(ctx, j, err, errors.Is(err, ErrNoTests))
+			w.Metrics.SystemError()
+			log.Warn("judging system error", "err", err)
+			permanent := errors.Is(err, ErrNoTests)
+			err = w.Queue.Fail(ctx, j, err, permanent)
+			if err == nil && (permanent || j.Attempts >= 3) {
+				w.Metrics.Verdict("SE")
+				log.Info("judging completed", "verdict", "SE")
+			}
 		}
 		if err != nil {
-			w.Log.Error("complete job attempt", "job", j.ID, "err", err)
+			log.Error("complete job attempt", "err", err)
 		}
 	}
 }

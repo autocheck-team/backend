@@ -18,6 +18,8 @@ import (
 	"github.com/autocheck-team/backend/internal/auth"
 	"github.com/autocheck-team/backend/internal/billing"
 	v1 "github.com/autocheck-team/backend/pkg/api/autocheck/v1"
+
+	"github.com/autocheck-team/backend/internal/monitoring"
 )
 
 const defaultPageSize = 20
@@ -45,9 +47,12 @@ type submissions interface {
 type Service struct {
 	v1.UnimplementedSubmissionServiceServer
 
+	// Metrics учитывает отклонённые запросы после проверки квот.
+	Metrics *monitoring.Metrics
 	repo    submissions
 	objects Objects
 	events  *Events
+	hints   *hinting
 }
 
 // NewService создаёт Service.
@@ -117,8 +122,10 @@ func (s *Service) CreateSubmission(ctx context.Context, req *v1.CreateSubmission
 		var limit *billing.LimitError
 		if errors.As(err, &limit) {
 			if limit.RetryAfter == 0 {
+				s.Metrics.Limit("test_runs")
 				return nil, status.Error(codes.ResourceExhausted, "лимит бесплатных прогонов исчерпан, оформите подписку")
 			}
+			s.Metrics.Limit("compilation")
 			result, detailErr := status.New(codes.ResourceExhausted, "лимит компиляций исчерпан, повторите позже").WithDetails(&errdetails.RetryInfo{RetryDelay: durationpb.New(limit.RetryAfter)})
 			if detailErr != nil {
 				return nil, fmt.Errorf("encode compilation retry: %w", detailErr)

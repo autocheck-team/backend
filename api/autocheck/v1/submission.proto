@@ -37,6 +37,20 @@ service SubmissionService {
     option (google.api.http) = {get: "/v1/submissions/{id}/report"};
   }
 
+  // CreateSubmissionHint даёт одну подсказку к собственной завершённой посылке.
+  // Новая подсказка требует Pro и разрешения автора; повтор возвращает сохранённый ответ.
+  rpc CreateSubmissionHint(CreateSubmissionHintRequest) returns (CreateSubmissionHintResponse) {
+    option (google.api.http) = {
+      post: "/v1/submissions/{id}:hint"
+      body: "*"
+    };
+  }
+
+  // ListSubmissionHints возвращает историю с правами GetSubmission, независимо от тарифа.
+  rpc ListSubmissionHints(ListSubmissionHintsRequest) returns (ListSubmissionHintsResponse) {
+    option (google.api.http) = {get: "/v1/submissions/{id}/hints"};
+  }
+
   // ListSubmissions возвращает посылки, новые первыми. Без problem_id — свои посылки.
   // С problem_id автор задания и администратор видят посылки всех пользователей.
   rpc ListSubmissions(ListSubmissionsRequest) returns (ListSubmissionsResponse) {
@@ -279,4 +293,49 @@ message SubmissionTestReport {
   // Построчный diff показанных префиксов: пробел = совпадение, минус = эталон, плюс = вывод.
   // Сохраняет CR и различие завершающего LF; пусто без сохранённого stdout.
   string diff = 12;
+}
+
+// SubmissionHint — сохранённая наводящая подсказка без кода решения.
+message SubmissionHint {
+  // Идентификатор записи истории.
+  int64 id = 1;
+  // Текст на русском языке, не больше 1000 символов.
+  string text = 2;
+  // Модель дважды выдала небезопасный ответ; возвращена общая подсказка.
+  bool is_fallback = 3;
+  // Время сохранения подсказки.
+  google.protobuf.Timestamp create_time = 4;
+}
+
+// CreateSubmissionHintRequest — запрос подсказки, ключ повтора — сама посылка.
+message CreateSubmissionHintRequest {
+  // Посылка (UUID).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// CreateSubmissionHintResponse — первоначальный ответ или его сохранённый повтор.
+message CreateSubmissionHintResponse {
+  // Подсказка, доступная без повторного вызова модели.
+  SubmissionHint hint = 1;
+}
+
+// ListSubmissionHintsRequest — история по посылке.
+message ListSubmissionHintsRequest {
+  // Посылка (UUID).
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Размер страницы, по умолчанию 20, максимум 100.
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  // Непрозрачный токен предыдущей страницы.
+  string page_token = 3;
+}
+
+// ListSubmissionHintsResponse — история: сейчас не больше одной подсказки на посылку.
+message ListSubmissionHintsResponse {
+  // Готовые подсказки; незавершённая генерация не показывается.
+  repeated SubmissionHint hints = 1;
+  // Токен продолжения; пусто для текущей истории из одной записи.
+  string next_page_token = 2;
 }

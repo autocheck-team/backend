@@ -25,10 +25,13 @@ import (
 
 	"github.com/autocheck-team/backend/internal/auth"
 	v1 "github.com/autocheck-team/backend/pkg/api/autocheck/v1"
+
+	"github.com/autocheck-team/backend/internal/monitoring"
 )
 
 // Config — адреса и параметры серверов.
 type Config struct {
+	Metrics            *monitoring.Metrics
 	GRPCAddr           string
 	HTTPAddr           string
 	CORSAllowedOrigins []string
@@ -37,11 +40,15 @@ type Config struct {
 
 // Services — реализации gRPC-сервисов.
 type Services struct {
-	User       v1.UserServiceServer
-	Problem    v1.ProblemServiceServer
-	Submission v1.SubmissionServiceServer
-	Feedback   v1.FeedbackServiceServer
-	Billing    v1.BillingServiceServer
+	User           v1.UserServiceServer
+	Problem        v1.ProblemServiceServer
+	Submission     v1.SubmissionServiceServer
+	Feedback       v1.FeedbackServiceServer
+	Billing        v1.BillingServiceServer
+	Material       v1.MaterialServiceServer
+	Playground     v1.PlaygroundServiceServer
+	TestGeneration v1.TestGenerationServiceServer
+	Recommendation v1.RecommendationServiceServer
 }
 
 // Server — gRPC-сервер и HTTP-шлюз.
@@ -57,19 +64,24 @@ func New(
 	cfg Config, log *slog.Logger, db Pinger, authn *auth.Interceptors,
 	validator protovalidate.Validator, svc Services,
 ) *Server {
+	if cfg.Metrics == nil {
+		cfg.Metrics = monitoring.New("api")
+	}
 	recoveryOpt := recovery.WithRecoveryHandlerContext(func(ctx context.Context, p any) error {
-		log.ErrorContext(ctx, "panic in handler", "panic", p)
+		monitoring.Logger(ctx, log).ErrorContext(ctx, "panic in handler", "panic", p)
 		return status.Error(codes.Internal, "внутренняя ошибка сервера")
 	})
 
 	g := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
+			cfg.Metrics.Unary(log),
 			recovery.UnaryServerInterceptor(recoveryOpt),
 			errorsUnary(log),
 			authn.Unary(),
 			protovalidatemw.UnaryServerInterceptor(validator),
 		),
 		grpc.ChainStreamInterceptor(
+			cfg.Metrics.Stream(log),
 			recovery.StreamServerInterceptor(recoveryOpt),
 			errorsStream(log),
 			authn.Stream(),
@@ -84,6 +96,19 @@ func New(
 		v1.RegisterBillingServiceServer(g, svc.Billing)
 	}
 
+	if svc.Material != nil {
+		v1.RegisterMaterialServiceServer(g, svc.Material)
+	}
+	if svc.Playground != nil {
+		v1.RegisterPlaygroundServiceServer(g, svc.Playground)
+	}
+
+	if svc.TestGeneration != nil {
+		v1.RegisterTestGenerationServiceServer(g, svc.TestGeneration)
+	}
+	if svc.Recommendation != nil {
+		v1.RegisterRecommendationServiceServer(g, svc.Recommendation)
+	}
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(g, hs)
 	reflection.Register(g)
@@ -111,19 +136,24 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Шлюз ходит в собственный gRPC-сервер по сети, а не вызывает сервисы напрямую,
 	// чтобы REST-запросы проходили через те же интерсепторы (авторизация, валидация).
-	conn, err := grpc.NewClient(dialTarget(lis.Addr()), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(dialTarget(lis.Addr()), grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(48<<20)))
 	if err != nil {
 		return fmt.Errorf("dial grpc: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
-	gw := runtime.NewServeMux()
+	gw := runtime.NewServeMux(runtime.WithMiddlewares(s.cfg.Metrics.GatewayRoute))
 	for _, register := range []func(context.Context, *runtime.ServeMux, *grpc.ClientConn) error{
 		v1.RegisterUserServiceHandler,
 		v1.RegisterProblemServiceHandler,
 		v1.RegisterSubmissionServiceHandler,
 		v1.RegisterFeedbackServiceHandler,
 		v1.RegisterBillingServiceHandler,
+		v1.RegisterMaterialServiceHandler,
+		v1.RegisterPlaygroundServiceHandler,
+		v1.RegisterTestGenerationServiceHandler,
+		v1.RegisterRecommendationServiceHandler,
 	} {
 		if err := register(ctx, gw, conn); err != nil {
 			return fmt.Errorf("register gateway: %w", err)
@@ -132,7 +162,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	httpSrv := &http.Server{
 		Addr:              s.cfg.HTTPAddr,
-		Handler:           cors(s.cfg.CORSAllowedOrigins, s.httpMux(gw)),
+		Handler:           cors(s.cfg.CORSAllowedOrigins, s.httpMux(s.cfg.Metrics.Gateway(gw))),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -192,7 +222,7 @@ func errorsUnary(log *slog.Logger) grpc.UnaryServerInterceptor {
 		if _, ok := status.FromError(err); ok {
 			return resp, err
 		}
-		log.ErrorContext(ctx, "rpc failed", "method", info.FullMethod, "err", err)
+		monitoring.Logger(ctx, log).ErrorContext(ctx, "rpc failed", "method", info.FullMethod, "err", err)
 		return nil, status.Error(codes.Internal, "внутренняя ошибка сервера")
 	}
 }
@@ -210,7 +240,7 @@ func errorsStream(log *slog.Logger) grpc.StreamServerInterceptor {
 		if _, ok := status.FromError(err); ok {
 			return err
 		}
-		log.ErrorContext(stream.Context(), "stream failed", "method", info.FullMethod, "err", err)
+		monitoring.Logger(stream.Context(), log).ErrorContext(stream.Context(), "stream failed", "method", info.FullMethod, "err", err)
 		return status.Error(codes.Internal, "внутренняя ошибка сервера")
 	}
 }

@@ -17,15 +17,22 @@ import (
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
 	"github.com/autocheck-team/backend/internal/feedback"
+	"github.com/autocheck-team/backend/internal/llm"
+	"github.com/autocheck-team/backend/internal/material"
+	"github.com/autocheck-team/backend/internal/playground"
 	"github.com/autocheck-team/backend/internal/problem"
+	"github.com/autocheck-team/backend/internal/recommendation"
 	"github.com/autocheck-team/backend/internal/server"
 	"github.com/autocheck-team/backend/internal/storage"
 	"github.com/autocheck-team/backend/internal/submission"
+	"github.com/autocheck-team/backend/internal/testgeneration"
 	"github.com/autocheck-team/backend/internal/user"
+
+	"github.com/autocheck-team/backend/internal/monitoring"
 )
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	log := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "api")
 	if err := run(log); err != nil {
 		log.Error("api stopped", "err", err)
 		os.Exit(1)
@@ -87,21 +94,44 @@ func run(log *slog.Logger) error {
 	if provider != nil {
 		paymentProvider = provider
 	}
-	billingService := billing.NewService(billing.NewRepository(pool), paymentProvider, log)
+	metrics := monitoring.New("api")
+	billingRepository := billing.NewRepository(pool)
+	billingRepository.Metrics = metrics
+	billingService := billing.NewService(billingRepository, paymentProvider, log)
+	model, err := llm.New(cfg.LLM)
+	if err != nil {
+		return err
+	}
+	recommendations := recommendation.New(
+		recommendation.NewRepository(pool, cfg.RecommendationQueryTimeout), model, validator, cfg.Recommendation)
+	submissionService := submission.NewWithHints(submission.NewRepository(pool), objects, events, submission.NewHintRepository(pool, cfg.HintQueryTimeout), model, cfg.HintTimeout)
+	submissionService.Metrics = metrics
 	srv := server.New(server.Config{
 		GRPCAddr:           cfg.GRPCAddr,
+		Metrics:            metrics,
 		HTTPAddr:           cfg.HTTPAddr,
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
 		ShutdownTimeout:    cfg.ShutdownTimeout,
 	}, log, pool, authn, validator, server.Services{
-		User:       user.NewService(),
-		Billing:    billingService,
-		Problem:    problem.NewService(problem.NewRepository(pool), objects, validator),
-		Submission: submission.NewService(submission.NewRepository(pool), objects, events),
-		Feedback:   feedback.NewService(feedback.NewRepository(pool, cfg.FeedbackQueryTimeout), validator),
+		User: user.NewService(),
+		Material: material.New(material.NewRepository(pool, cfg.MaterialQueryTimeout), billingRepository, objects, validator, material.Config{
+			MaxAttachmentBytes: cfg.MaterialMaxAttachmentBytes, ObjectTimeout: cfg.MaterialObjectTimeout,
+		}),
+		Billing:        billingService,
+		Problem:        problem.NewService(problem.NewRepository(pool), objects, validator),
+		Submission:     submissionService,
+		Playground:     playground.New(playground.NewRepository(pool, cfg.PlaygroundQueryTimeout), validator),
+		Feedback:       feedback.NewService(feedback.NewRepository(pool, cfg.FeedbackQueryTimeout), validator),
+		TestGeneration: testgeneration.New(testgeneration.NewRepository(pool), objects, validator, cfg.LLM.APIKey != ""),
+		Recommendation: recommendations,
 	})
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error { return srv.Run(ctx) })
+	group.Go(func() error { return metrics.Run(ctx, cfg.MetricsAddr, cfg.ShutdownTimeout) })
 	group.Go(func() error { return billingService.RunSync(ctx, cfg.BillingSyncInterval) })
+	group.Go(func() error {
+		recommendations.Run(ctx, func(err error) { log.ErrorContext(ctx, "problem embedding refresh failed", "err", err) })
+		return nil
+	})
 	return group.Wait()
 }

@@ -9,17 +9,24 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/autocheck-team/backend/internal/llm"
+	"github.com/autocheck-team/backend/internal/testgeneration"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
 	"github.com/autocheck-team/backend/internal/judge"
+	"github.com/autocheck-team/backend/internal/playground"
 	"github.com/autocheck-team/backend/internal/sandbox"
 	"github.com/autocheck-team/backend/internal/storage"
+
+	"github.com/autocheck-team/backend/internal/monitoring"
 )
 
 const sweepInterval = 5 * time.Minute
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	log := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "worker")
 	if err := run(log); err != nil {
 		log.Error("worker stopped", "err", err)
 		os.Exit(1)
@@ -45,7 +52,11 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = sb.Close() }()
+	defer func() {
+		if err := sb.Close(); err != nil {
+			log.Warn("close sandbox client", "err", err)
+		}
+	}()
 	initCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	objects, err := storage.New(initCtx, storage.Config{
 		Endpoint: cfg.S3Endpoint, PublicEndpoint: cfg.S3PublicEndpoint,
@@ -56,23 +67,50 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	repo := judge.NewRepository(pool)
+	metrics := monitoring.New("worker")
+	runner := judge.NewRunner(repo, objects, judge.Docker{Sandbox: sb})
+	runner.Metrics = metrics
 	worker := judge.Worker{
-		Queue: repo, Runner: judge.NewRunner(repo, objects, judge.Docker{Sandbox: sb}),
+		Metrics: metrics,
+		Queue:   repo, Runner: runner,
 		Log: log, ID: cfg.WorkerID, Concurrency: cfg.WorkerConcurrency, PollInterval: cfg.WorkerPollInterval,
 	}
 	log.Info("worker started", "id", cfg.WorkerID, "concurrency", cfg.WorkerConcurrency)
-	go sweep(ctx, log, sb)
-	worker.Run(ctx)
-	return nil
+	model, err := llm.New(cfg.LLM)
+	if err != nil {
+		return err
+	}
+	playgroundWorker := playground.Worker{
+		Repository: playground.NewRepository(pool, cfg.PlaygroundQueryTimeout),
+		Runner:     playground.NewRunner(sb), Log: log, ID: cfg.WorkerID,
+		Concurrency: cfg.WorkerConcurrency, PollInterval: cfg.WorkerPollInterval,
+	}
+	group, ctx := errgroup.WithContext(ctx)
+	group.Go(func() error { worker.Run(ctx); return nil })
+	group.Go(func() error { playgroundWorker.Run(ctx); return nil })
+	group.Go(func() error { sweep(ctx, log, sb, metrics); return nil })
+	group.Go(func() error {
+		return judge.ObserveQueue(ctx, repo, metrics, log, cfg.MetricsPollInterval, cfg.MetricsQueryTimeout)
+	})
+	group.Go(func() error { return metrics.Run(ctx, cfg.MetricsAddr, cfg.ShutdownTimeout) })
+	if model.Enabled() {
+		group.Go(func() error {
+			testgeneration.NewRepository(pool).Run(ctx, testgeneration.NewRunner(model, sb), cfg.WorkerConcurrency, cfg.WorkerPollInterval, func(err error) { log.ErrorContext(ctx, "test generation failed", "err", err) })
+			return nil
+		})
+	}
+	return group.Wait()
 }
 
 // sweep убирает остатки упавших воркеров при старте и затем периодически.
-func sweep(ctx context.Context, log *slog.Logger, sb *sandbox.Sandbox) {
+func sweep(ctx context.Context, log *slog.Logger, sb *sandbox.Sandbox, metrics *monitoring.Metrics) {
 	ticker := time.NewTicker(sweepInterval)
 	defer ticker.Stop()
 	for {
 		sweepCtx, cancel := context.WithTimeout(ctx, time.Minute)
-		if err := sb.Sweep(sweepCtx); err != nil && ctx.Err() == nil {
+		err := sb.Sweep(sweepCtx)
+		metrics.Cleanup("sweep", err)
+		if err != nil && ctx.Err() == nil {
 			log.Warn("sweep sandbox leftovers", "err", err)
 		}
 		cancel()

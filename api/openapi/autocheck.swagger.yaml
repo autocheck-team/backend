@@ -10,10 +10,18 @@ tags:
     description: BillingService управляет оплатой доступа и показывает доступные квоты.
   - name: FeedbackService
     description: FeedbackService — запросы пользователей об изменениях платформы.
+  - name: MaterialService
+    description: MaterialService предоставляет учебные материалы платформы по подписке.
+  - name: PlaygroundService
+    description: PlaygroundService хранит личные мини-проекты и ставит их запуски в очередь воркера.
   - name: ProblemService
     description: ProblemService — задания, тест-кейсы и языки программирования.
+  - name: RecommendationService
+    description: RecommendationService подбирает опубликованные задания всем вошедшим пользователям бесплатно.
   - name: SubmissionService
     description: 'SubmissionService — посылки: отправка решений и их результаты.'
+  - name: TestGenerationService
+    description: TestGenerationService — черновики тестов, доступные автору задания и администратору.
 consumes:
   - application/json
 produces:
@@ -190,6 +198,208 @@ paths:
             $ref: '#/definitions/rpcStatus'
       tags:
         - ProblemService
+  /v1/materials:
+    get:
+      summary: ListMaterials возвращает описания по порядку, затем UUID; содержимое только через GetMaterial.
+      operationId: MaterialService_ListMaterials
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListMaterialsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: UUID задания, пусто для общего списка.
+          in: query
+          required: false
+          type: string
+        - name: pageSize
+          description: Размер страницы, по умолчанию 20, максимум 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Непрозрачный токен; фильтр при продолжении сохраняется.
+          in: query
+          required: false
+          type: string
+      tags:
+        - MaterialService
+    post:
+      summary: CreateMaterial создаёт материал; доступен только admin.
+      operationId: MaterialService_CreateMaterial
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateMaterialResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: CreateMaterialRequest создаёт материал идемпотентно по request_id.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1CreateMaterialRequest'
+      tags:
+        - MaterialService
+  /v1/materials/{id}:
+    get:
+      summary: GetMaterial возвращает описание и, при доступе, содержимое и вложения.
+      operationId: MaterialService_GetMaterial
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetMaterialResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID материала.
+          in: path
+          required: true
+          type: string
+      tags:
+        - MaterialService
+    delete:
+      summary: DeleteMaterial удаляет материал; доступен только admin.
+      operationId: MaterialService_DeleteMaterial
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1DeleteMaterialResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID материала.
+          in: path
+          required: true
+          type: string
+      tags:
+        - MaterialService
+    put:
+      summary: UpdateMaterial полностью заменяет редактируемые поля; доступен только admin.
+      operationId: MaterialService_UpdateMaterial
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1UpdateMaterialResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID материала.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/MaterialServiceUpdateMaterialBody'
+      tags:
+        - MaterialService
+  /v1/materials/{materialId}/attachments:
+    post:
+      summary: CreateMaterialAttachment выдаёт admin временную PUT-ссылку для нового вложения.
+      operationId: MaterialService_CreateMaterialAttachment
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateMaterialAttachmentResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: materialId
+          description: UUID материала.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/MaterialServiceCreateMaterialAttachmentBody'
+      tags:
+        - MaterialService
+  /v1/materials/{materialId}/attachments/{id}:
+    delete:
+      summary: DeleteMaterialAttachment удаляет вложение; доступен только admin.
+      operationId: MaterialService_DeleteMaterialAttachment
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1DeleteMaterialAttachmentResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: materialId
+          description: UUID материала.
+          in: path
+          required: true
+          type: string
+        - name: id
+          description: UUID вложения.
+          in: path
+          required: true
+          type: string
+      tags:
+        - MaterialService
+  /v1/materials/{materialId}/attachments/{id}:confirm:
+    post:
+      summary: ConfirmMaterialAttachment проверяет файл и сохраняет неизменяемую копию; только admin.
+      operationId: MaterialService_ConfirmMaterialAttachment
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ConfirmMaterialAttachmentResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: materialId
+          description: UUID материала.
+          in: path
+          required: true
+          type: string
+        - name: id
+          description: UUID вложения.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/MaterialServiceConfirmMaterialAttachmentBody'
+      tags:
+        - MaterialService
   /v1/me:
     get:
       summary: |-
@@ -494,6 +704,38 @@ paths:
             $ref: '#/definitions/ProblemServiceGetCheckerUploadBody'
       tags:
         - ProblemService
+  /v1/problems/{problemId}/materials:
+    get:
+      summary: ListMaterials возвращает описания по порядку, затем UUID; содержимое только через GetMaterial.
+      operationId: MaterialService_ListMaterials2
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListMaterialsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: UUID задания, пусто для общего списка.
+          in: path
+          required: true
+          type: string
+        - name: pageSize
+          description: Размер страницы, по умолчанию 20, максимум 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Непрозрачный токен; фильтр при продолжении сохраняется.
+          in: query
+          required: false
+          type: string
+      tags:
+        - MaterialService
   /v1/problems/{problemId}/submissions:
     post:
       summary: |-
@@ -631,6 +873,272 @@ paths:
             $ref: '#/definitions/ProblemServiceConfirmTestCaseBody'
       tags:
         - ProblemService
+  /v1/problems/{problemId}/test-generations:
+    post:
+      summary: CreateTestGeneration резервирует дневную квоту Pro и запускает асинхронную генерацию.
+      operationId: TestGenerationService_CreateTestGeneration
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateTestGenerationResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: UUID задания.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/TestGenerationServiceCreateTestGenerationBody'
+      tags:
+        - TestGenerationService
+  /v1/problems/{problemId}/test-generations/{id}:
+    get:
+      summary: GetTestGeneration возвращает состояние и результаты без исходника эталона.
+      operationId: TestGenerationService_GetTestGeneration
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetTestGenerationResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: UUID задания.
+          in: path
+          required: true
+          type: string
+        - name: id
+          description: UUID генерации.
+          in: path
+          required: true
+          type: string
+      tags:
+        - TestGenerationService
+  /v1/problems/{problemId}/test-generations/{id}:accept:
+    post:
+      summary: AcceptTestGeneration включает выбранные черновики в обычные закрытые тесты; повтор безопасен.
+      operationId: TestGenerationService_AcceptTestGeneration
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1AcceptTestGenerationResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: problemId
+          description: UUID задания.
+          in: path
+          required: true
+          type: string
+        - name: id
+          description: UUID завершённой генерации.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/TestGenerationServiceAcceptTestGenerationBody'
+      tags:
+        - TestGenerationService
+  /v1/problems:recommend:
+    post:
+      summary: RecommendProblems возвращает до десяти заданий; дневная квота общая для всех тарифов.
+      operationId: RecommendationService_RecommendProblems
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1RecommendProblemsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: RecommendProblemsRequest содержит учебную цель, а не инструкции для модели.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1RecommendProblemsRequest'
+      tags:
+        - RecommendationService
+  /v1/project-runs/{id}:
+    get:
+      summary: GetProjectRun возвращает состояние и результат своего запуска или любого для admin.
+      operationId: PlaygroundService_GetProjectRun
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetProjectRunResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID запуска.
+          in: path
+          required: true
+          type: string
+      tags:
+        - PlaygroundService
+  /v1/projects:
+    get:
+      summary: ListProjects возвращает только свои проекты, новые первыми, включая администратора.
+      operationId: PlaygroundService_ListProjects
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListProjectsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: pageSize
+          description: 0 означает 20, максимум 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Непрозрачный токен; пусто для первой страницы.
+          in: query
+          required: false
+          type: string
+      tags:
+        - PlaygroundService
+    post:
+      summary: CreateProject создаёт свой проект; повтор ключа возвращает первоначальный проект.
+      operationId: PlaygroundService_CreateProject
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateProjectResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: CreateProjectRequest — создание проекта с идемпотентным ключом.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1CreateProjectRequest'
+      tags:
+        - PlaygroundService
+  /v1/projects/{id}:
+    get:
+      summary: GetProject читает свой проект; администратор может читать любой.
+      operationId: PlaygroundService_GetProject
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetProjectResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID проекта.
+          in: path
+          required: true
+          type: string
+      tags:
+        - PlaygroundService
+    delete:
+      summary: DeleteProject удаляет свой проект; уже принятые запуски сохраняются.
+      operationId: PlaygroundService_DeleteProject
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1DeleteProjectResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID проекта.
+          in: path
+          required: true
+          type: string
+      tags:
+        - PlaygroundService
+    put:
+      summary: UpdateProject полностью заменяет название, язык и файлы своего проекта.
+      operationId: PlaygroundService_UpdateProject
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1UpdateProjectResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID проекта.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/PlaygroundServiceUpdateProjectBody'
+      tags:
+        - PlaygroundService
+  /v1/projects/{id}:run:
+    post:
+      summary: RunProject сохраняет снимок проекта и stdin; компиляция расходует общую квоту billing.
+      operationId: PlaygroundService_RunProject
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1RunProjectResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID своего проекта.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/PlaygroundServiceRunProjectBody'
+      tags:
+        - PlaygroundService
   /v1/submissions:
     get:
       summary: |-
@@ -688,6 +1196,38 @@ paths:
           type: string
       tags:
         - SubmissionService
+  /v1/submissions/{id}/hints:
+    get:
+      summary: ListSubmissionHints возвращает историю с правами GetSubmission, независимо от тарифа.
+      operationId: SubmissionService_ListSubmissionHints
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListSubmissionHintsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Посылка (UUID).
+          in: path
+          required: true
+          type: string
+        - name: pageSize
+          description: Размер страницы, по умолчанию 20, максимум 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Непрозрачный токен предыдущей страницы.
+          in: query
+          required: false
+          type: string
+      tags:
+        - SubmissionService
   /v1/submissions/{id}/report:
     get:
       summary: |-
@@ -730,6 +1270,34 @@ paths:
           in: path
           required: true
           type: string
+      tags:
+        - SubmissionService
+  /v1/submissions/{id}:hint:
+    post:
+      summary: |-
+        CreateSubmissionHint даёт одну подсказку к собственной завершённой посылке.
+        Новая подсказка требует Pro и разрешения автора; повтор возвращает сохранённый ответ.
+      operationId: SubmissionService_CreateSubmissionHint
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateSubmissionHintResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Посылка (UUID).
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/SubmissionServiceCreateSubmissionHintBody'
       tags:
         - SubmissionService
   /v1/submissions/{id}:watch:
@@ -809,6 +1377,52 @@ definitions:
         type: string
         description: Комментарий до 5000 символов; пустое значение очищает комментарий.
     description: UpdateFeedbackRequestRequest — полная замена статуса и комментария администратором.
+  MaterialServiceConfirmMaterialAttachmentBody:
+    type: object
+    description: ConfirmMaterialAttachmentRequest завершает загрузку.
+  MaterialServiceCreateMaterialAttachmentBody:
+    type: object
+    properties:
+      filename:
+        type: string
+        description: Имя файла (картинка или PDF), до 255 символов, без пути.
+      requestId:
+        type: string
+        description: UUID операции для безопасного повтора.
+    description: CreateMaterialAttachmentRequest резервирует новый файл.
+  MaterialServiceUpdateMaterialBody:
+    type: object
+    properties:
+      material:
+        $ref: '#/definitions/v1MaterialInput'
+        description: Полные новые данные.
+    description: UpdateMaterialRequest полностью заменяет поля, включая публикацию и связи.
+  PlaygroundServiceRunProjectBody:
+    type: object
+    properties:
+      stdin:
+        type: string
+        description: Стандартный ввод UTF-8, до 64 КиБ; пустое значение означает EOF.
+      clientRequestId:
+        type: string
+        description: Обязательный UUID; повтор для того же проекта возвращает прежний запуск без расхода квоты.
+    description: RunProjectRequest — приём снимка в очередь.
+  PlaygroundServiceUpdateProjectBody:
+    type: object
+    properties:
+      title:
+        type: string
+        description: Название; не только пробелы.
+      languageId:
+        type: string
+        description: Активный язык из каталога.
+      files:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1ProjectFile'
+        description: Полный новый набор файлов, включая source_file языка.
+    description: UpdateProjectRequest — полная замена редактируемых полей своего проекта.
   ProblemServiceConfirmCheckerBody:
     type: object
     description: ConfirmCheckerRequest — подтверждение загрузки чекера.
@@ -842,6 +1456,38 @@ definitions:
         type: string
         description: 'Ключ идемпотентности (UUID): повтор запроса с тем же ключом не создаёт новую посылку.'
     description: CreateSubmissionRequest — отправка решения.
+  SubmissionServiceCreateSubmissionHintBody:
+    type: object
+    description: CreateSubmissionHintRequest — запрос подсказки, ключ повтора — сама посылка.
+  TestGenerationServiceAcceptTestGenerationBody:
+    type: object
+    properties:
+      testIds:
+        type: array
+        items:
+          type: string
+        description: UUID кандидатов; повтор выбора уже принятых безопасен.
+    description: AcceptTestGenerationRequest — выбор пригодных кандидатов.
+  TestGenerationServiceCreateTestGenerationBody:
+    type: object
+    properties:
+      requestId:
+        type: string
+        description: UUID идемпотентности в пределах пользователя, обязателен.
+      languageId:
+        type: string
+        description: Активный язык задания.
+      source:
+        type: string
+        description: Исходник эталона UTF-8, не более 64 КиБ.
+      testCount:
+        type: integer
+        format: int32
+        description: Число кандидатов от 1 до 20.
+      wishes:
+        type: string
+        description: Пожелания автора, пустое значение допустимо.
+    description: CreateTestGenerationRequest — данные эталона автора и ограничения генерации.
   protobufAny:
     type: object
     properties:
@@ -861,6 +1507,13 @@ definitions:
         items:
           type: object
           $ref: '#/definitions/protobufAny'
+  v1AcceptTestGenerationResponse:
+    type: object
+    properties:
+      generation:
+        $ref: '#/definitions/v1TestGeneration'
+        description: Обновлённая генерация.
+    description: AcceptTestGenerationResponse — состояние с принятыми кандидатами.
   v1Checker:
     type: string
     enum:
@@ -903,6 +1556,13 @@ definitions:
   v1ConfirmCheckerResponse:
     type: object
     description: ConfirmCheckerResponse — чекер загружен.
+  v1ConfirmMaterialAttachmentResponse:
+    type: object
+    properties:
+      attachment:
+        $ref: '#/definitions/v1MaterialAttachment'
+        description: Вложение.
+    description: ConfirmMaterialAttachmentResponse содержит подтверждённые метаданные без ссылки.
   v1ConfirmTestCaseResponse:
     type: object
     properties:
@@ -937,12 +1597,80 @@ definitions:
         $ref: '#/definitions/v1FeedbackRequest'
         description: Сохранённый запрос.
     description: CreateFeedbackRequestResponse — созданный или ранее созданный запрос.
+  v1CreateMaterialAttachmentResponse:
+    type: object
+    properties:
+      attachment:
+        $ref: '#/definitions/v1MaterialAttachment'
+        description: Метаданные вложения.
+      uploadUrl:
+        type: string
+        description: Ссылка для PUT; пусто, если вложение уже подтверждено.
+      uploadExpireTime:
+        type: string
+        format: date-time
+        description: Срок PUT-ссылки; отсутствует без ссылки.
+      maxSizeBytes:
+        type: string
+        format: int64
+        description: Максимальный размер в байтах, проверяется при confirm.
+    description: CreateMaterialAttachmentResponse содержит ссылку загрузки и предел размера.
+  v1CreateMaterialRequest:
+    type: object
+    properties:
+      material:
+        $ref: '#/definitions/v1MaterialInput'
+        description: Полные данные материала.
+      requestId:
+        type: string
+        description: UUID операции, повторять при сетевой ошибке.
+    description: CreateMaterialRequest создаёт материал идемпотентно по request_id.
+  v1CreateMaterialResponse:
+    type: object
+    properties:
+      material:
+        $ref: '#/definitions/v1Material'
+        description: Созданный материал.
+    description: CreateMaterialResponse содержит созданный материал без ссылок.
   v1CreateProblemResponse:
     type: object
     properties:
       problem:
         $ref: '#/definitions/v1Problem'
     description: CreateProblemResponse — созданное задание.
+  v1CreateProjectRequest:
+    type: object
+    properties:
+      title:
+        type: string
+        description: Название; не только пробелы.
+      languageId:
+        type: string
+        description: Активный язык из каталога.
+      files:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1ProjectFile'
+        description: Файлы с уникальными именами, включая source_file выбранного языка.
+      clientRequestId:
+        type: string
+        description: Обязательный UUID; повтор не расходует лимит проектов.
+    description: CreateProjectRequest — создание проекта с идемпотентным ключом.
+  v1CreateProjectResponse:
+    type: object
+    properties:
+      project:
+        $ref: '#/definitions/v1Project'
+        description: Созданный или первоначальный проект.
+    description: CreateProjectResponse — сохранённый проект.
+  v1CreateSubmissionHintResponse:
+    type: object
+    properties:
+      hint:
+        $ref: '#/definitions/v1SubmissionHint'
+        description: Подсказка, доступная без повторного вызова модели.
+    description: CreateSubmissionHintResponse — первоначальный ответ или его сохранённый повтор.
   v1CreateSubmissionResponse:
     type: object
     properties:
@@ -965,9 +1693,25 @@ definitions:
         format: date-time
         description: До какого момента действуют ссылки.
     description: CreateTestCaseResponse — созданный тест и ссылки для загрузки файлов.
+  v1CreateTestGenerationResponse:
+    type: object
+    properties:
+      generation:
+        $ref: '#/definitions/v1TestGeneration'
+        description: Генерация в очереди либо результат повторного запроса.
+    description: CreateTestGenerationResponse — сохранённая генерация.
+  v1DeleteMaterialAttachmentResponse:
+    type: object
+    description: DeleteMaterialAttachmentResponse подтверждает удаление.
+  v1DeleteMaterialResponse:
+    type: object
+    description: DeleteMaterialResponse подтверждает удаление.
   v1DeleteProblemResponse:
     type: object
     description: DeleteProblemResponse — ответ на удаление задания.
+  v1DeleteProjectResponse:
+    type: object
+    description: DeleteProjectResponse подтверждает удаление.
   v1DeleteTestCaseResponse:
     type: object
     description: DeleteTestCaseResponse — ответ на удаление теста.
@@ -1039,6 +1783,30 @@ definitions:
        - FEEDBACK_REQUEST_TYPE_COMPILER_UPDATE: Обновление компилятора или версии языка.
        - FEEDBACK_REQUEST_TYPE_NEW_LIBRARY: Добавление библиотеки.
        - FEEDBACK_REQUEST_TYPE_OTHER: Остальные предложения.
+  v1GeneratedTest:
+    type: object
+    properties:
+      id:
+        type: string
+        description: UUID кандидата, совпадает с UUID принятого test_case.
+      input:
+        type: string
+        format: byte
+        description: Вход, пустой у отклонённого кандидата.
+      expected:
+        type: string
+        format: byte
+        description: Вывод эталона, пустой у отклонённого кандидата.
+      explanation:
+        type: string
+        description: Пояснение проверяемого случая.
+      rejectionReason:
+        type: string
+        description: Безопасная причина отбрасывания, пустая у пригодного теста.
+      isAccepted:
+        type: boolean
+        description: Кандидат уже включён в задание.
+    description: GeneratedTest — один кандидат; вход и вывод возвращаются как bytes (base64 в REST).
   v1GetCheckerUploadResponse:
     type: object
     properties:
@@ -1055,6 +1823,13 @@ definitions:
         $ref: '#/definitions/v1FeedbackRequest'
         description: Запрос пользователя.
     description: GetFeedbackRequestResponse — доступный пользователю запрос.
+  v1GetMaterialResponse:
+    type: object
+    properties:
+      material:
+        $ref: '#/definitions/v1Material'
+        description: Материал; при is_locked платные поля отсутствуют.
+    description: GetMaterialResponse содержит материал с учётом прав.
   v1GetMeResponse:
     type: object
     properties:
@@ -1104,6 +1879,20 @@ definitions:
       problem:
         $ref: '#/definitions/v1Problem'
     description: GetProblemResponse — задание.
+  v1GetProjectResponse:
+    type: object
+    properties:
+      project:
+        $ref: '#/definitions/v1Project'
+        description: Проект с файлами.
+    description: GetProjectResponse — доступный проект.
+  v1GetProjectRunResponse:
+    type: object
+    properties:
+      run:
+        $ref: '#/definitions/v1ProjectRun'
+        description: Запуск; done и failed — конечные состояния.
+    description: GetProjectRunResponse — состояние и сохранённый результат.
   v1GetSubmissionReportResponse:
     type: object
     properties:
@@ -1156,6 +1945,13 @@ definitions:
         type: string
         description: Исходный код.
     description: GetSubmissionSourceResponse — исходный код посылки.
+  v1GetTestGenerationResponse:
+    type: object
+    properties:
+      generation:
+        $ref: '#/definitions/v1TestGeneration'
+        description: Генерация с черновиками и причинами отказов.
+    description: GetTestGenerationResponse — актуальное состояние.
   v1Language:
     type: object
     properties:
@@ -1188,6 +1984,19 @@ definitions:
           type: object
           $ref: '#/definitions/v1Language'
     description: ListLanguagesResponse — доступные языки.
+  v1ListMaterialsResponse:
+    type: object
+    properties:
+      materials:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1Material'
+        description: Материалы по ordinal и UUID, без Markdown и вложений.
+      nextPageToken:
+        type: string
+        description: Пусто на последней странице.
+    description: ListMaterialsResponse содержит только описания материалов.
   v1ListMyPaymentsResponse:
     type: object
     properties:
@@ -1223,6 +2032,32 @@ definitions:
         type: string
         description: Токен следующей страницы; пустой, если это последняя страница.
     description: ListProblemsResponse — страница заданий.
+  v1ListProjectsResponse:
+    type: object
+    properties:
+      projects:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1Project'
+        description: Проекты с файлами, новые первыми.
+      nextPageToken:
+        type: string
+        description: Пусто для последней страницы.
+    description: ListProjectsResponse — страница проектов.
+  v1ListSubmissionHintsResponse:
+    type: object
+    properties:
+      hints:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1SubmissionHint'
+        description: Готовые подсказки; незавершённая генерация не показывается.
+      nextPageToken:
+        type: string
+        description: Токен продолжения; пусто для текущей истории из одной записи.
+    description: 'ListSubmissionHintsResponse — история: сейчас не больше одной подсказки на посылку.'
   v1ListSubmissionsResponse:
     type: object
     properties:
@@ -1244,6 +2079,103 @@ definitions:
           type: object
           $ref: '#/definitions/v1TestCase'
     description: ListTestCasesResponse — тесты задания по порядку.
+  v1Material:
+    type: object
+    properties:
+      id:
+        type: string
+        description: UUID материала.
+      title:
+        type: string
+        description: Заголовок материала.
+      description:
+        type: string
+        description: Краткое описание для всех вошедших.
+      contentMarkdown:
+        type: string
+        description: Markdown; пусто при is_locked и во всех списках.
+      problemIds:
+        type: array
+        items:
+          type: string
+        description: Привязанные задания (UUID).
+      ordinal:
+        type: integer
+        format: int32
+        description: Порядок по возрастанию, начиная с нуля.
+      isPublished:
+        type: boolean
+        description: Опубликован ли материал.
+      isLocked:
+        type: boolean
+        description: Для содержимого и вложений требуется подписка Pro.
+      attachments:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1MaterialAttachment'
+        description: Вложения; пусто при is_locked и во всех списках, неподтверждённые видны только admin.
+      createTime:
+        type: string
+        format: date-time
+        description: Момент создания.
+      updateTime:
+        type: string
+        format: date-time
+        description: Момент последней правки.
+    description: Material содержит описание и условно доступные платные поля.
+  v1MaterialAttachment:
+    type: object
+    properties:
+      id:
+        type: string
+        description: UUID вложения.
+      filename:
+        type: string
+        description: Имя файла без пути.
+      contentType:
+        type: string
+        description: Проверенный MIME-тип, пусто до подтверждения.
+      sizeBytes:
+        type: string
+        format: int64
+        description: Размер в байтах, ноль до подтверждения.
+      isReady:
+        type: boolean
+        description: Прошло ли вложение подтверждение.
+      downloadUrl:
+        type: string
+        description: Временная GET-ссылка, пусто до подтверждения.
+      downloadExpireTime:
+        type: string
+        format: date-time
+        description: Срок GET-ссылки; отсутствует без ссылки.
+    description: MaterialAttachment описывает вложение без внутреннего S3-ключа.
+  v1MaterialInput:
+    type: object
+    properties:
+      title:
+        type: string
+        description: Заголовок, от 1 до 200 символов, не только пробелы.
+      description:
+        type: string
+        description: Краткое описание для всех вошедших, до 2000 символов.
+      contentMarkdown:
+        type: string
+        description: Markdown, от 1 до 200000 символов, не только пробелы.
+      problemIds:
+        type: array
+        items:
+          type: string
+        description: Задания (UUID), от 1 до 100 различных идентификаторов.
+      ordinal:
+        type: integer
+        format: int32
+        description: Порядок по возрастанию, начиная с нуля.
+      isPublished:
+        type: boolean
+        description: Публикация; черновик доступен только admin.
+    description: MaterialInput содержит полностью заменяемые поля материала.
   v1Payment:
     type: object
     properties:
@@ -1294,7 +2226,18 @@ definitions:
         type: integer
         format: int32
         description: Число прогонов за календарный месяц UTC; ноль — без ограничения.
-    description: Plan содержит цену в копейках и ограничения, ноль лимита означает отсутствие ограничения.
+      hasMaterialAccess:
+        type: boolean
+        description: Доступ к учебным материалам платформы.
+      dailyTestGenerationLimit:
+        type: integer
+        format: int32
+        description: Максимум генераций за календарные сутки UTC; ноль запрещает генерации.
+      dailyAiHintLimit:
+        type: integer
+        format: int32
+        description: Максимум новых подсказок за календарные сутки UTC; ноль запрещает подсказки.
+    description: Plan содержит цену в копейках и ограничения; смысл нуля указан у каждого лимита.
   v1Problem:
     type: object
     properties:
@@ -1360,6 +2303,160 @@ definitions:
         description: Время последнего изменения.
         readOnly: true
     description: Problem — задание.
+  v1ProblemRecommendation:
+    type: object
+    properties:
+      problemId:
+        type: string
+        description: UUID задания из каталога.
+      score:
+        type: number
+        format: double
+        description: Косинусная близость [-1, 1]; при текстовом поиске — нормализованный ранг [0, 1].
+    description: ProblemRecommendation содержит только идентификатор существующего опубликованного задания.
+  v1Project:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор UUID.
+      userId:
+        type: string
+        description: Владелец UUID.
+      title:
+        type: string
+        description: Название от 1 до 200 символов.
+      languageId:
+        type: string
+        description: Активный язык из languages; файл source_file этого языка обязателен.
+      files:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1ProjectFile'
+        description: От 1 до 20 файлов, общий размер содержимого до 256 КиБ.
+      createTime:
+        type: string
+        format: date-time
+        description: Время создания.
+      updateTime:
+        type: string
+        format: date-time
+        description: Время последнего изменения.
+    description: Project — личный мини-проект; максимум 20 проектов на пользователя.
+  v1ProjectFile:
+    type: object
+    properties:
+      name:
+        type: string
+        description: 'Уникальное имя: ASCII буквы, цифры, подчёркивание, точка и дефис; начинается с буквы или цифры.'
+      content:
+        type: string
+        description: Содержимое UTF-8, включая пустой файл; суммарно не более 262144 байт на проект.
+    description: ProjectFile — UTF-8 файл в корне рабочего каталога без вложенных путей.
+  v1ProjectRun:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор запуска UUID.
+      projectId:
+        type: string
+        description: Проект UUID, сохраняется после удаления проекта.
+      status:
+        $ref: '#/definitions/v1ProjectRunStatus'
+        description: Этап исполнения.
+      verdict:
+        type: string
+        description: Пусто до завершения; OK, CE, TL, ML, RE или SE.
+      exitCode:
+        type: integer
+        format: int32
+        description: Код возврата компилятора при CE, иначе программы; отсутствует до результата.
+      stdout:
+        type: string
+        description: Префикс stdout, до 64 КиБ UTF-8.
+      stderr:
+        type: string
+        description: Префикс stderr, до 64 КиБ UTF-8.
+      compileLog:
+        type: string
+        description: Вывод компилятора, до 64 КиБ UTF-8.
+      isOutputTruncated:
+        type: boolean
+        description: Был ли обрезан stdout, stderr или compile_log либо превышен лимит вывода песочницы.
+      timeMs:
+        type: string
+        format: int64
+        description: Реальное время исполнения или неуспешной компиляции, миллисекунды.
+      memoryKb:
+        type: string
+        format: int64
+        description: Приблизительный пик памяти, КиБ, по Docker stats.
+      createTime:
+        type: string
+        format: date-time
+        description: Время приёма запроса.
+      updateTime:
+        type: string
+        format: date-time
+        description: Время последнего изменения состояния.
+    description: ProjectRun — результат без исходников; лимит исполнения 5 секунд / 256 МиБ, сеть отключена.
+  v1ProjectRunStatus:
+    type: string
+    enum:
+      - PROJECT_RUN_STATUS_UNSPECIFIED
+      - PROJECT_RUN_STATUS_QUEUED
+      - PROJECT_RUN_STATUS_COMPILING
+      - PROJECT_RUN_STATUS_RUNNING
+      - PROJECT_RUN_STATUS_DONE
+      - PROJECT_RUN_STATUS_FAILED
+    default: PROJECT_RUN_STATUS_UNSPECIFIED
+    description: |-
+      ProjectRunStatus — этап исполнения снимка мини-проекта.
+
+       - PROJECT_RUN_STATUS_UNSPECIFIED: Состояние не задано.
+       - PROJECT_RUN_STATUS_QUEUED: Ожидает воркера, включая системные повторы.
+       - PROJECT_RUN_STATUS_COMPILING: Компилируется.
+       - PROJECT_RUN_STATUS_RUNNING: Выполняется.
+       - PROJECT_RUN_STATUS_DONE: Программа завершена, включая CE, TL, ML и RE.
+       - PROJECT_RUN_STATUS_FAILED: Три попытки завершились системной ошибкой.
+  v1RecommendProblemsRequest:
+    type: object
+    properties:
+      goal:
+        type: string
+        description: Чему пользователь хочет научиться; 1–1000 символов, не только пробелы.
+      languageId:
+        type: string
+        description: Разрешённый активный язык задания; пустое значение отключает фильтр.
+      difficulty:
+        type: string
+        description: Пожелание к сложности до 100 символов; семантическая подсказка, не строгий фильтр.
+      limit:
+        type: integer
+        format: int32
+        description: 'Число результатов: 0 означает 5, максимум 10. Продолжения списка нет.'
+    description: RecommendProblemsRequest содержит учебную цель, а не инструкции для модели.
+  v1RecommendProblemsResponse:
+    type: object
+    properties:
+      recommendations:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1ProblemRecommendation'
+        description: Задания по убыванию оценки; при равенстве — по UUID. Список может быть пустым.
+      explanation:
+        type: string
+        description: Одно общее объяснение до 500 символов; пустое при недоступной LLM или отсутствии результатов.
+      isTextFallback:
+        type: boolean
+        description: Истина, если применён текстовый поиск вместо эмбеддингов.
+      fallbackMessage:
+        type: string
+        description: Безопасное пояснение деградации для пользователя; иначе пустое.
+    description: RecommendProblemsResponse явно сообщает о деградации до текстового поиска.
   v1ReportText:
     type: object
     properties:
@@ -1384,6 +2481,13 @@ definitions:
        - ROLE_STUDENT: Студент: решает задания и отправляет посылки.
        - ROLE_AUTHOR: Автор заданий: создаёт задания и тесты.
        - ROLE_ADMIN: Администратор платформы.
+  v1RunProjectResponse:
+    type: object
+    properties:
+      run:
+        $ref: '#/definitions/v1ProjectRun'
+        description: Запуск со статусом queued или первоначальный результат при повторе.
+    description: RunProjectResponse — принятый запуск, результат запрашивается отдельно.
   v1Submission:
     type: object
     properties:
@@ -1437,6 +2541,24 @@ definitions:
         format: date-time
         description: Конец проверки.
     description: Submission — посылка.
+  v1SubmissionHint:
+    type: object
+    properties:
+      id:
+        type: string
+        format: int64
+        description: Идентификатор записи истории.
+      text:
+        type: string
+        description: Текст на русском языке, не больше 1000 символов.
+      isFallback:
+        type: boolean
+        description: Модель дважды выдала небезопасный ответ; возвращена общая подсказка.
+      createTime:
+        type: string
+        format: date-time
+        description: Время сохранения подсказки.
+    description: SubmissionHint — сохранённая наводящая подсказка без кода решения.
   v1SubmissionStatus:
     type: string
     enum:
@@ -1504,6 +2626,9 @@ definitions:
   v1TestCase:
     type: object
     properties:
+      isGenerated:
+        type: boolean
+        description: Тест получен генерацией и явно принят автором.
       id:
         type: string
         description: Идентификатор (UUID).
@@ -1539,6 +2664,53 @@ definitions:
         type: string
         description: Временная ссылка на скачивание эталонного вывода. Пустая, если тест не загружен.
     description: TestCase — тест задания.
+  v1TestGeneration:
+    type: object
+    properties:
+      id:
+        type: string
+        description: UUID генерации.
+      problemId:
+        type: string
+        description: UUID задания.
+      status:
+        $ref: '#/definitions/v1TestGenerationStatus'
+        description: Этап обработки.
+      tests:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1GeneratedTest'
+        description: Кандидаты в порядке генерации.
+      error:
+        type: string
+        description: Безопасная причина общей ошибки, без ответа LLM или исходника.
+      createTime:
+        type: string
+        format: date-time
+        description: Время постановки в очередь.
+      updateTime:
+        type: string
+        format: date-time
+        description: Время последнего изменения.
+    description: TestGeneration — состояние генерации, максимум 20 кандидатов.
+  v1TestGenerationStatus:
+    type: string
+    enum:
+      - TEST_GENERATION_STATUS_UNSPECIFIED
+      - TEST_GENERATION_STATUS_QUEUED
+      - TEST_GENERATION_STATUS_RUNNING
+      - TEST_GENERATION_STATUS_DONE
+      - TEST_GENERATION_STATUS_FAILED
+    default: TEST_GENERATION_STATUS_UNSPECIFIED
+    description: |-
+      TestGenerationStatus — этап обработки.
+
+       - TEST_GENERATION_STATUS_UNSPECIFIED: Не задан.
+       - TEST_GENERATION_STATUS_QUEUED: Ожидает воркера.
+       - TEST_GENERATION_STATUS_RUNNING: LLM и песочница обрабатывают задание.
+       - TEST_GENERATION_STATUS_DONE: Черновики готовы, включая возможные отказы отдельных входов.
+       - TEST_GENERATION_STATUS_FAILED: Обработка завершилась ошибкой.
   v1TestRun:
     type: object
     properties:
@@ -1578,12 +2750,26 @@ definitions:
         $ref: '#/definitions/v1FeedbackRequest'
         description: Состояние после изменения.
     description: UpdateFeedbackRequestResponse — изменённый запрос.
+  v1UpdateMaterialResponse:
+    type: object
+    properties:
+      material:
+        $ref: '#/definitions/v1Material'
+        description: Изменённый материал.
+    description: UpdateMaterialResponse содержит изменённый материал без ссылок.
   v1UpdateProblemResponse:
     type: object
     properties:
       problem:
         $ref: '#/definitions/v1Problem'
     description: UpdateProblemResponse — изменённое задание.
+  v1UpdateProjectResponse:
+    type: object
+    properties:
+      project:
+        $ref: '#/definitions/v1Project'
+        description: Проект после замены.
+    description: UpdateProjectResponse — обновлённый проект.
   v1User:
     type: object
     properties:

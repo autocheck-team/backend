@@ -24,6 +24,7 @@ import (
 	"io"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -60,6 +61,9 @@ const (
 	// WorkspaceBytes ограничивает сумму файлов, а не только размер одного файла.
 	WorkspaceBytes = 256 << 20
 )
+
+// workspacePrefix отличает volume рабочих пространств от остальных volume Docker.
+const workspacePrefix = "autocheck-ws-"
 
 // Sandbox запускает контейнеры через Docker Engine API.
 type Sandbox struct {
@@ -129,12 +133,17 @@ func (s *Sandbox) Sweep(ctx context.Context) error {
 			}
 		}
 	}
-	volumes, err := s.cli.VolumeList(ctx, client.VolumeListOptions{Filters: filter})
+	// Фильтр только по имени: Docker сам создаёт volume без меток, если оставшийся
+	// контейнер ссылается на уже удалённый workspace, и такой volume иначе не убрать.
+	volumes, err := s.cli.VolumeList(ctx, client.VolumeListOptions{Filters: client.Filters{}.Add("name", workspacePrefix)})
 	if err != nil {
 		errs = append(errs, fmt.Errorf("list volumes: %w", err))
 		return errors.Join(errs...)
 	}
 	for _, v := range volumes.Items {
+		if !strings.HasPrefix(v.Name, workspacePrefix) {
+			continue
+		}
 		created, err := time.Parse(time.RFC3339, v.CreatedAt)
 		if err != nil || time.Since(created) < orphanVolumeAge {
 			continue
@@ -164,7 +173,7 @@ type file struct {
 
 // NewWorkspace создаёт рабочее пространство. Его нужно закрыть через Close.
 func (s *Sandbox) NewWorkspace(ctx context.Context) (*Workspace, error) {
-	name := "autocheck-ws-" + uuid.NewString()
+	name := workspacePrefix + uuid.NewString()
 	if _, err := s.cli.VolumeCreate(ctx, client.VolumeCreateOptions{
 		Name: name, Labels: map[string]string{labelKey: "workspace"},
 		Driver: "local",
@@ -298,10 +307,17 @@ func (w *Workspace) keepMounted(ctx context.Context, image string) error {
 	if err != nil {
 		return fmt.Errorf("create workspace keeper: %w", err)
 	}
-	w.keeper = id
 	if _, err := w.sb.cli.ContainerStart(ctx, id, client.ContainerStartOptions{}); err != nil {
+		// Незапущенный keeper иначе висит в состоянии Created до плановой уборки:
+		// удаляем сразу и с собственным контекстом, ctx мог быть уже отменён.
+		rmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if _, rmErr := w.sb.cli.ContainerRemove(rmCtx, id, client.ContainerRemoveOptions{Force: true}); rmErr != nil {
+			err = errors.Join(err, fmt.Errorf("remove workspace keeper: %w", rmErr))
+		}
 		return fmt.Errorf("start workspace keeper: %w", err)
 	}
+	w.keeper = id
 	return nil
 }
 
