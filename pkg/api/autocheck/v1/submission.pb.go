@@ -1308,6 +1308,290 @@ func (x *SubmissionTestReport) GetDiff() string {
 	return ""
 }
 
+// SubmissionHint — сохранённая наводящая подсказка без кода решения.
+type SubmissionHint struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Идентификатор записи истории.
+	Id int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Текст на русском языке, не больше 1000 символов.
+	Text string `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	// Модель дважды выдала небезопасный ответ; возвращена общая подсказка.
+	IsFallback bool `protobuf:"varint,3,opt,name=is_fallback,json=isFallback,proto3" json:"is_fallback,omitempty"`
+	// Время сохранения подсказки.
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmissionHint) Reset() {
+	*x = SubmissionHint{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmissionHint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmissionHint) ProtoMessage() {}
+
+func (x *SubmissionHint) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmissionHint.ProtoReflect.Descriptor instead.
+func (*SubmissionHint) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SubmissionHint) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *SubmissionHint) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *SubmissionHint) GetIsFallback() bool {
+	if x != nil {
+		return x.IsFallback
+	}
+	return false
+}
+
+func (x *SubmissionHint) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+// CreateSubmissionHintRequest — запрос подсказки, ключ повтора — сама посылка.
+type CreateSubmissionHintRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Посылка (UUID).
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateSubmissionHintRequest) Reset() {
+	*x = CreateSubmissionHintRequest{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateSubmissionHintRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateSubmissionHintRequest) ProtoMessage() {}
+
+func (x *CreateSubmissionHintRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateSubmissionHintRequest.ProtoReflect.Descriptor instead.
+func (*CreateSubmissionHintRequest) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *CreateSubmissionHintRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// CreateSubmissionHintResponse — первоначальный ответ или его сохранённый повтор.
+type CreateSubmissionHintResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Подсказка, доступная без повторного вызова модели.
+	Hint          *SubmissionHint `protobuf:"bytes,1,opt,name=hint,proto3" json:"hint,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateSubmissionHintResponse) Reset() {
+	*x = CreateSubmissionHintResponse{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateSubmissionHintResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateSubmissionHintResponse) ProtoMessage() {}
+
+func (x *CreateSubmissionHintResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateSubmissionHintResponse.ProtoReflect.Descriptor instead.
+func (*CreateSubmissionHintResponse) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *CreateSubmissionHintResponse) GetHint() *SubmissionHint {
+	if x != nil {
+		return x.Hint
+	}
+	return nil
+}
+
+// ListSubmissionHintsRequest — история по посылке.
+type ListSubmissionHintsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Посылка (UUID).
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Размер страницы, по умолчанию 20, максимум 100.
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Непрозрачный токен предыдущей страницы.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSubmissionHintsRequest) Reset() {
+	*x = ListSubmissionHintsRequest{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSubmissionHintsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSubmissionHintsRequest) ProtoMessage() {}
+
+func (x *ListSubmissionHintsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSubmissionHintsRequest.ProtoReflect.Descriptor instead.
+func (*ListSubmissionHintsRequest) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListSubmissionHintsRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ListSubmissionHintsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListSubmissionHintsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// ListSubmissionHintsResponse — история: сейчас не больше одной подсказки на посылку.
+type ListSubmissionHintsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Готовые подсказки; незавершённая генерация не показывается.
+	Hints []*SubmissionHint `protobuf:"bytes,1,rep,name=hints,proto3" json:"hints,omitempty"`
+	// Токен продолжения; пусто для текущей истории из одной записи.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSubmissionHintsResponse) Reset() {
+	*x = ListSubmissionHintsResponse{}
+	mi := &file_autocheck_v1_submission_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSubmissionHintsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSubmissionHintsResponse) ProtoMessage() {}
+
+func (x *ListSubmissionHintsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_autocheck_v1_submission_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSubmissionHintsResponse.ProtoReflect.Descriptor instead.
+func (*ListSubmissionHintsResponse) Descriptor() ([]byte, []int) {
+	return file_autocheck_v1_submission_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ListSubmissionHintsResponse) GetHints() []*SubmissionHint {
+	if x != nil {
+		return x.Hints
+	}
+	return nil
+}
+
+func (x *ListSubmissionHintsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_autocheck_v1_submission_proto protoreflect.FileDescriptor
 
 const file_autocheck_v1_submission_proto_rawDesc = "" +
@@ -1419,7 +1703,26 @@ const file_autocheck_v1_submission_proto_rawDesc = "" +
 	"\x0fexpected_output\x18\n" +
 	" \x01(\v2\x18.autocheck.v1.ReportTextR\x0eexpectedOutput\x12=\n" +
 	"\ractual_output\x18\v \x01(\v2\x18.autocheck.v1.ReportTextR\factualOutput\x12\x12\n" +
-	"\x04diff\x18\f \x01(\tR\x04diff*\xcd\x01\n" +
+	"\x04diff\x18\f \x01(\tR\x04diff\"\x92\x01\n" +
+	"\x0eSubmissionHint\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12\x1f\n" +
+	"\vis_fallback\x18\x03 \x01(\bR\n" +
+	"isFallback\x12;\n" +
+	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\"7\n" +
+	"\x1bCreateSubmissionHintRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"P\n" +
+	"\x1cCreateSubmissionHintResponse\x120\n" +
+	"\x04hint\x18\x01 \x01(\v2\x1c.autocheck.v1.SubmissionHintR\x04hint\"}\n" +
+	"\x1aListSubmissionHintsRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12&\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x00R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"y\n" +
+	"\x1bListSubmissionHintsResponse\x122\n" +
+	"\x05hints\x18\x01 \x03(\v2\x1c.autocheck.v1.SubmissionHintR\x05hints\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xcd\x01\n" +
 	"\x10SubmissionStatus\x12!\n" +
 	"\x1dSUBMISSION_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18SUBMISSION_STATUS_QUEUED\x10\x01\x12\x1f\n" +
@@ -1436,12 +1739,14 @@ const file_autocheck_v1_submission_proto_rawDesc = "" +
 	"\x1bVERDICT_TIME_LIMIT_EXCEEDED\x10\x04\x12!\n" +
 	"\x1dVERDICT_MEMORY_LIMIT_EXCEEDED\x10\x05\x12\x19\n" +
 	"\x15VERDICT_RUNTIME_ERROR\x10\x06\x12\x18\n" +
-	"\x14VERDICT_SYSTEM_ERROR\x10\a2\xc5\x06\n" +
+	"\x14VERDICT_SYSTEM_ERROR\x10\a2\xec\b\n" +
 	"\x11SubmissionService\x12\x93\x01\n" +
 	"\x10CreateSubmission\x12%.autocheck.v1.CreateSubmissionRequest\x1a&.autocheck.v1.CreateSubmissionResponse\"0\x82\xd3\xe4\x93\x02*:\x01*\"%/v1/problems/{problem_id}/submissions\x12v\n" +
 	"\rGetSubmission\x12\".autocheck.v1.GetSubmissionRequest\x1a#.autocheck.v1.GetSubmissionResponse\"\x1c\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/submissions/{id}\x12\x84\x01\n" +
 	"\x0fWatchSubmission\x12$.autocheck.v1.WatchSubmissionRequest\x1a%.autocheck.v1.WatchSubmissionResponse\"\"\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/submissions/{id}:watch0\x01\x12\x8f\x01\n" +
-	"\x13GetSubmissionReport\x12(.autocheck.v1.GetSubmissionReportRequest\x1a).autocheck.v1.GetSubmissionReportResponse\"#\x82\xd3\xe4\x93\x02\x1d\x12\x1b/v1/submissions/{id}/report\x12w\n" +
+	"\x13GetSubmissionReport\x12(.autocheck.v1.GetSubmissionReportRequest\x1a).autocheck.v1.GetSubmissionReportResponse\"#\x82\xd3\xe4\x93\x02\x1d\x12\x1b/v1/submissions/{id}/report\x12\x93\x01\n" +
+	"\x14CreateSubmissionHint\x12).autocheck.v1.CreateSubmissionHintRequest\x1a*.autocheck.v1.CreateSubmissionHintResponse\"$\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/submissions/{id}:hint\x12\x8e\x01\n" +
+	"\x13ListSubmissionHints\x12(.autocheck.v1.ListSubmissionHintsRequest\x1a).autocheck.v1.ListSubmissionHintsResponse\"\"\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/submissions/{id}/hints\x12w\n" +
 	"\x0fListSubmissions\x12$.autocheck.v1.ListSubmissionsRequest\x1a%.autocheck.v1.ListSubmissionsResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/submissions\x12\x8f\x01\n" +
 	"\x13GetSubmissionSource\x12(.autocheck.v1.GetSubmissionSourceRequest\x1a).autocheck.v1.GetSubmissionSourceResponse\"#\x82\xd3\xe4\x93\x02\x1d\x12\x1b/v1/submissions/{id}/sourceB\xb8\x01\n" +
 	"\x10com.autocheck.v1B\x0fSubmissionProtoP\x01ZBgithub.com/autocheck-team/backend/pkg/api/autocheck/v1;autocheckv1\xa2\x02\x03AXX\xaa\x02\fAutocheck.V1\xca\x02\fAutocheck\\V1\xe2\x02\x18Autocheck\\V1\\GPBMetadata\xea\x02\rAutocheck::V1b\x06proto3"
@@ -1459,34 +1764,39 @@ func file_autocheck_v1_submission_proto_rawDescGZIP() []byte {
 }
 
 var file_autocheck_v1_submission_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_autocheck_v1_submission_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_autocheck_v1_submission_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_autocheck_v1_submission_proto_goTypes = []any{
-	(SubmissionStatus)(0),               // 0: autocheck.v1.SubmissionStatus
-	(Verdict)(0),                        // 1: autocheck.v1.Verdict
-	(*Submission)(nil),                  // 2: autocheck.v1.Submission
-	(*TestRun)(nil),                     // 3: autocheck.v1.TestRun
-	(*CreateSubmissionRequest)(nil),     // 4: autocheck.v1.CreateSubmissionRequest
-	(*CreateSubmissionResponse)(nil),    // 5: autocheck.v1.CreateSubmissionResponse
-	(*GetSubmissionRequest)(nil),        // 6: autocheck.v1.GetSubmissionRequest
-	(*GetSubmissionResponse)(nil),       // 7: autocheck.v1.GetSubmissionResponse
-	(*ListSubmissionsRequest)(nil),      // 8: autocheck.v1.ListSubmissionsRequest
-	(*ListSubmissionsResponse)(nil),     // 9: autocheck.v1.ListSubmissionsResponse
-	(*GetSubmissionSourceRequest)(nil),  // 10: autocheck.v1.GetSubmissionSourceRequest
-	(*GetSubmissionSourceResponse)(nil), // 11: autocheck.v1.GetSubmissionSourceResponse
-	(*WatchSubmissionRequest)(nil),      // 12: autocheck.v1.WatchSubmissionRequest
-	(*WatchSubmissionResponse)(nil),     // 13: autocheck.v1.WatchSubmissionResponse
-	(*GetSubmissionReportRequest)(nil),  // 14: autocheck.v1.GetSubmissionReportRequest
-	(*GetSubmissionReportResponse)(nil), // 15: autocheck.v1.GetSubmissionReportResponse
-	(*ReportText)(nil),                  // 16: autocheck.v1.ReportText
-	(*SubmissionTestReport)(nil),        // 17: autocheck.v1.SubmissionTestReport
-	(*timestamppb.Timestamp)(nil),       // 18: google.protobuf.Timestamp
+	(SubmissionStatus)(0),                // 0: autocheck.v1.SubmissionStatus
+	(Verdict)(0),                         // 1: autocheck.v1.Verdict
+	(*Submission)(nil),                   // 2: autocheck.v1.Submission
+	(*TestRun)(nil),                      // 3: autocheck.v1.TestRun
+	(*CreateSubmissionRequest)(nil),      // 4: autocheck.v1.CreateSubmissionRequest
+	(*CreateSubmissionResponse)(nil),     // 5: autocheck.v1.CreateSubmissionResponse
+	(*GetSubmissionRequest)(nil),         // 6: autocheck.v1.GetSubmissionRequest
+	(*GetSubmissionResponse)(nil),        // 7: autocheck.v1.GetSubmissionResponse
+	(*ListSubmissionsRequest)(nil),       // 8: autocheck.v1.ListSubmissionsRequest
+	(*ListSubmissionsResponse)(nil),      // 9: autocheck.v1.ListSubmissionsResponse
+	(*GetSubmissionSourceRequest)(nil),   // 10: autocheck.v1.GetSubmissionSourceRequest
+	(*GetSubmissionSourceResponse)(nil),  // 11: autocheck.v1.GetSubmissionSourceResponse
+	(*WatchSubmissionRequest)(nil),       // 12: autocheck.v1.WatchSubmissionRequest
+	(*WatchSubmissionResponse)(nil),      // 13: autocheck.v1.WatchSubmissionResponse
+	(*GetSubmissionReportRequest)(nil),   // 14: autocheck.v1.GetSubmissionReportRequest
+	(*GetSubmissionReportResponse)(nil),  // 15: autocheck.v1.GetSubmissionReportResponse
+	(*ReportText)(nil),                   // 16: autocheck.v1.ReportText
+	(*SubmissionTestReport)(nil),         // 17: autocheck.v1.SubmissionTestReport
+	(*SubmissionHint)(nil),               // 18: autocheck.v1.SubmissionHint
+	(*CreateSubmissionHintRequest)(nil),  // 19: autocheck.v1.CreateSubmissionHintRequest
+	(*CreateSubmissionHintResponse)(nil), // 20: autocheck.v1.CreateSubmissionHintResponse
+	(*ListSubmissionHintsRequest)(nil),   // 21: autocheck.v1.ListSubmissionHintsRequest
+	(*ListSubmissionHintsResponse)(nil),  // 22: autocheck.v1.ListSubmissionHintsResponse
+	(*timestamppb.Timestamp)(nil),        // 23: google.protobuf.Timestamp
 }
 var file_autocheck_v1_submission_proto_depIdxs = []int32{
 	0,  // 0: autocheck.v1.Submission.status:type_name -> autocheck.v1.SubmissionStatus
 	1,  // 1: autocheck.v1.Submission.verdict:type_name -> autocheck.v1.Verdict
-	18, // 2: autocheck.v1.Submission.create_time:type_name -> google.protobuf.Timestamp
-	18, // 3: autocheck.v1.Submission.start_time:type_name -> google.protobuf.Timestamp
-	18, // 4: autocheck.v1.Submission.finish_time:type_name -> google.protobuf.Timestamp
+	23, // 2: autocheck.v1.Submission.create_time:type_name -> google.protobuf.Timestamp
+	23, // 3: autocheck.v1.Submission.start_time:type_name -> google.protobuf.Timestamp
+	23, // 4: autocheck.v1.Submission.finish_time:type_name -> google.protobuf.Timestamp
 	1,  // 5: autocheck.v1.TestRun.verdict:type_name -> autocheck.v1.Verdict
 	2,  // 6: autocheck.v1.CreateSubmissionResponse.submission:type_name -> autocheck.v1.Submission
 	2,  // 7: autocheck.v1.GetSubmissionResponse.submission:type_name -> autocheck.v1.Submission
@@ -1500,23 +1810,30 @@ var file_autocheck_v1_submission_proto_depIdxs = []int32{
 	16, // 15: autocheck.v1.SubmissionTestReport.input:type_name -> autocheck.v1.ReportText
 	16, // 16: autocheck.v1.SubmissionTestReport.expected_output:type_name -> autocheck.v1.ReportText
 	16, // 17: autocheck.v1.SubmissionTestReport.actual_output:type_name -> autocheck.v1.ReportText
-	4,  // 18: autocheck.v1.SubmissionService.CreateSubmission:input_type -> autocheck.v1.CreateSubmissionRequest
-	6,  // 19: autocheck.v1.SubmissionService.GetSubmission:input_type -> autocheck.v1.GetSubmissionRequest
-	12, // 20: autocheck.v1.SubmissionService.WatchSubmission:input_type -> autocheck.v1.WatchSubmissionRequest
-	14, // 21: autocheck.v1.SubmissionService.GetSubmissionReport:input_type -> autocheck.v1.GetSubmissionReportRequest
-	8,  // 22: autocheck.v1.SubmissionService.ListSubmissions:input_type -> autocheck.v1.ListSubmissionsRequest
-	10, // 23: autocheck.v1.SubmissionService.GetSubmissionSource:input_type -> autocheck.v1.GetSubmissionSourceRequest
-	5,  // 24: autocheck.v1.SubmissionService.CreateSubmission:output_type -> autocheck.v1.CreateSubmissionResponse
-	7,  // 25: autocheck.v1.SubmissionService.GetSubmission:output_type -> autocheck.v1.GetSubmissionResponse
-	13, // 26: autocheck.v1.SubmissionService.WatchSubmission:output_type -> autocheck.v1.WatchSubmissionResponse
-	15, // 27: autocheck.v1.SubmissionService.GetSubmissionReport:output_type -> autocheck.v1.GetSubmissionReportResponse
-	9,  // 28: autocheck.v1.SubmissionService.ListSubmissions:output_type -> autocheck.v1.ListSubmissionsResponse
-	11, // 29: autocheck.v1.SubmissionService.GetSubmissionSource:output_type -> autocheck.v1.GetSubmissionSourceResponse
-	24, // [24:30] is the sub-list for method output_type
-	18, // [18:24] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	23, // 18: autocheck.v1.SubmissionHint.create_time:type_name -> google.protobuf.Timestamp
+	18, // 19: autocheck.v1.CreateSubmissionHintResponse.hint:type_name -> autocheck.v1.SubmissionHint
+	18, // 20: autocheck.v1.ListSubmissionHintsResponse.hints:type_name -> autocheck.v1.SubmissionHint
+	4,  // 21: autocheck.v1.SubmissionService.CreateSubmission:input_type -> autocheck.v1.CreateSubmissionRequest
+	6,  // 22: autocheck.v1.SubmissionService.GetSubmission:input_type -> autocheck.v1.GetSubmissionRequest
+	12, // 23: autocheck.v1.SubmissionService.WatchSubmission:input_type -> autocheck.v1.WatchSubmissionRequest
+	14, // 24: autocheck.v1.SubmissionService.GetSubmissionReport:input_type -> autocheck.v1.GetSubmissionReportRequest
+	19, // 25: autocheck.v1.SubmissionService.CreateSubmissionHint:input_type -> autocheck.v1.CreateSubmissionHintRequest
+	21, // 26: autocheck.v1.SubmissionService.ListSubmissionHints:input_type -> autocheck.v1.ListSubmissionHintsRequest
+	8,  // 27: autocheck.v1.SubmissionService.ListSubmissions:input_type -> autocheck.v1.ListSubmissionsRequest
+	10, // 28: autocheck.v1.SubmissionService.GetSubmissionSource:input_type -> autocheck.v1.GetSubmissionSourceRequest
+	5,  // 29: autocheck.v1.SubmissionService.CreateSubmission:output_type -> autocheck.v1.CreateSubmissionResponse
+	7,  // 30: autocheck.v1.SubmissionService.GetSubmission:output_type -> autocheck.v1.GetSubmissionResponse
+	13, // 31: autocheck.v1.SubmissionService.WatchSubmission:output_type -> autocheck.v1.WatchSubmissionResponse
+	15, // 32: autocheck.v1.SubmissionService.GetSubmissionReport:output_type -> autocheck.v1.GetSubmissionReportResponse
+	20, // 33: autocheck.v1.SubmissionService.CreateSubmissionHint:output_type -> autocheck.v1.CreateSubmissionHintResponse
+	22, // 34: autocheck.v1.SubmissionService.ListSubmissionHints:output_type -> autocheck.v1.ListSubmissionHintsResponse
+	9,  // 35: autocheck.v1.SubmissionService.ListSubmissions:output_type -> autocheck.v1.ListSubmissionsResponse
+	11, // 36: autocheck.v1.SubmissionService.GetSubmissionSource:output_type -> autocheck.v1.GetSubmissionSourceResponse
+	29, // [29:37] is the sub-list for method output_type
+	21, // [21:29] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_autocheck_v1_submission_proto_init() }
@@ -1532,7 +1849,7 @@ func file_autocheck_v1_submission_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_autocheck_v1_submission_proto_rawDesc), len(file_autocheck_v1_submission_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   16,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

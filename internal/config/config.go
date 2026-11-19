@@ -15,6 +15,8 @@ import (
 // Config — настройки api, worker и migrate.
 type Config struct {
 	LLM                  llm.Config
+	HintTimeout          time.Duration
+	HintQueryTimeout     time.Duration
 	HTTPAddr             string
 	GRPCAddr             string
 	DatabaseURL          string
@@ -78,6 +80,19 @@ func Load() (Config, error) {
 
 	c.LLM = llm.Config{BaseURL: getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1"), APIKey: os.Getenv("LLM_API_KEY"), Model: getenv("LLM_MODEL", "nvidia/nemotron-3.5-super-vl:free"), EmbeddingModel: getenv("LLM_EMBEDDING_MODEL", "nvidia/nemotron-3.5-embed-1b:free")}
 	var errs []error
+	for _, setting := range []struct {
+		name, fallback string
+		target         *time.Duration
+	}{
+		{"HINT_TIMEOUT", "5m", &c.HintTimeout},
+		{"HINT_QUERY_TIMEOUT", "5s", &c.HintQueryTimeout},
+	} {
+		duration, parseErr := time.ParseDuration(getenv(setting.name, setting.fallback))
+		if parseErr != nil || duration <= 0 {
+			errs = append(errs, fmt.Errorf("invalid positive duration for %s", setting.name))
+		}
+		*setting.target = duration
+	}
 	if c.DatabaseURL == "" {
 		errs = append(errs, errors.New("DATABASE_URL is required"))
 	}

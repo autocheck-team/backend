@@ -17,6 +17,7 @@ import (
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
 	"github.com/autocheck-team/backend/internal/feedback"
+	"github.com/autocheck-team/backend/internal/llm"
 	"github.com/autocheck-team/backend/internal/problem"
 	"github.com/autocheck-team/backend/internal/server"
 	"github.com/autocheck-team/backend/internal/storage"
@@ -88,6 +89,10 @@ func run(log *slog.Logger) error {
 	if provider != nil {
 		paymentProvider = provider
 	}
+	model, err := llm.New(cfg.LLM)
+	if err != nil {
+		return err
+	}
 	billingService := billing.NewService(billing.NewRepository(pool), paymentProvider, log)
 	srv := server.New(server.Config{
 		GRPCAddr:           cfg.GRPCAddr,
@@ -99,7 +104,7 @@ func run(log *slog.Logger) error {
 		TestGeneration: testgeneration.New(testgeneration.NewRepository(pool), objects, validator, cfg.LLM.APIKey != ""),
 		Billing:        billingService,
 		Problem:        problem.NewService(problem.NewRepository(pool), objects, validator),
-		Submission:     submission.NewService(submission.NewRepository(pool), objects, events),
+		Submission:     submission.NewWithHints(submission.NewRepository(pool), objects, events, submission.NewHintRepository(pool, cfg.HintQueryTimeout), model, cfg.HintTimeout),
 		Feedback:       feedback.NewService(feedback.NewRepository(pool, cfg.FeedbackQueryTimeout), validator),
 	})
 	group, ctx := errgroup.WithContext(ctx)

@@ -25,7 +25,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Plan содержит цену в копейках и ограничения, ноль лимита означает отсутствие ограничения.
+// Plan содержит цену в копейках и ограничения; смысл нуля указан у каждого лимита.
 type Plan struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Стабильный код тарифа.
@@ -44,8 +44,10 @@ type Plan struct {
 	MonthlyTestRunLimit int32 `protobuf:"varint,7,opt,name=monthly_test_run_limit,json=monthlyTestRunLimit,proto3" json:"monthly_test_run_limit,omitempty"`
 	// Максимум генераций за календарные сутки UTC; ноль запрещает генерации.
 	DailyTestGenerationLimit int32 `protobuf:"varint,8,opt,name=daily_test_generation_limit,json=dailyTestGenerationLimit,proto3" json:"daily_test_generation_limit,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// Максимум новых подсказок за календарные сутки UTC; ноль запрещает подсказки.
+	DailyAiHintLimit int32 `protobuf:"varint,9,opt,name=daily_ai_hint_limit,json=dailyAiHintLimit,proto3" json:"daily_ai_hint_limit,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Plan) Reset() {
@@ -130,6 +132,13 @@ func (x *Plan) GetMonthlyTestRunLimit() int32 {
 func (x *Plan) GetDailyTestGenerationLimit() int32 {
 	if x != nil {
 		return x.DailyTestGenerationLimit
+	}
+	return 0
+}
+
+func (x *Plan) GetDailyAiHintLimit() int32 {
+	if x != nil {
+		return x.DailyAiHintLimit
 	}
 	return 0
 }
@@ -834,7 +843,7 @@ var File_autocheck_v1_billing_proto protoreflect.FileDescriptor
 
 const file_autocheck_v1_billing_proto_rawDesc = "" +
 	"\n" +
-	"\x1aautocheck/v1/billing.proto\x12\fautocheck.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\"\xd5\x02\n" +
+	"\x1aautocheck/v1/billing.proto\x12\fautocheck.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\"\x84\x03\n" +
 	"\x04Plan\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
@@ -844,7 +853,8 @@ const file_autocheck_v1_billing_proto_rawDesc = "" +
 	"\x11compilation_limit\x18\x05 \x01(\x05R\x10compilationLimit\x12<\n" +
 	"\x1acompilation_window_seconds\x18\x06 \x01(\x05R\x18compilationWindowSeconds\x123\n" +
 	"\x16monthly_test_run_limit\x18\a \x01(\x05R\x13monthlyTestRunLimit\x12=\n" +
-	"\x1bdaily_test_generation_limit\x18\b \x01(\x05R\x18dailyTestGenerationLimit\"\x12\n" +
+	"\x1bdaily_test_generation_limit\x18\b \x01(\x05R\x18dailyTestGenerationLimit\x12-\n" +
+	"\x13daily_ai_hint_limit\x18\t \x01(\x05R\x10dailyAiHintLimit\"\x12\n" +
 	"\x10ListPlansRequest\"=\n" +
 	"\x11ListPlansResponse\x12(\n" +
 	"\x05plans\x18\x01 \x03(\v2\x12.autocheck.v1.PlanR\x05plans\"\x1a\n" +

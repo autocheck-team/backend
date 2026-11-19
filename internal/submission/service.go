@@ -48,6 +48,7 @@ type Service struct {
 	repo    submissions
 	objects Objects
 	events  *Events
+	hints   *hinting
 }
 
 // NewService создаёт Service.

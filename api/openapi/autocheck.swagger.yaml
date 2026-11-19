@@ -773,6 +773,38 @@ paths:
           type: string
       tags:
         - SubmissionService
+  /v1/submissions/{id}/hints:
+    get:
+      summary: ListSubmissionHints возвращает историю с правами GetSubmission, независимо от тарифа.
+      operationId: SubmissionService_ListSubmissionHints
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListSubmissionHintsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Посылка (UUID).
+          in: path
+          required: true
+          type: string
+        - name: pageSize
+          description: Размер страницы, по умолчанию 20, максимум 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Непрозрачный токен предыдущей страницы.
+          in: query
+          required: false
+          type: string
+      tags:
+        - SubmissionService
   /v1/submissions/{id}/report:
     get:
       summary: |-
@@ -815,6 +847,34 @@ paths:
           in: path
           required: true
           type: string
+      tags:
+        - SubmissionService
+  /v1/submissions/{id}:hint:
+    post:
+      summary: |-
+        CreateSubmissionHint даёт одну подсказку к собственной завершённой посылке.
+        Новая подсказка требует Pro и разрешения автора; повтор возвращает сохранённый ответ.
+      operationId: SubmissionService_CreateSubmissionHint
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateSubmissionHintResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: Посылка (UUID).
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/SubmissionServiceCreateSubmissionHintBody'
       tags:
         - SubmissionService
   /v1/submissions/{id}:watch:
@@ -927,6 +987,9 @@ definitions:
         type: string
         description: 'Ключ идемпотентности (UUID): повтор запроса с тем же ключом не создаёт новую посылку.'
     description: CreateSubmissionRequest — отправка решения.
+  SubmissionServiceCreateSubmissionHintBody:
+    type: object
+    description: CreateSubmissionHintRequest — запрос подсказки, ключ повтора — сама посылка.
   TestGenerationServiceAcceptTestGenerationBody:
     type: object
     properties:
@@ -1064,6 +1127,13 @@ definitions:
       problem:
         $ref: '#/definitions/v1Problem'
     description: CreateProblemResponse — созданное задание.
+  v1CreateSubmissionHintResponse:
+    type: object
+    properties:
+      hint:
+        $ref: '#/definitions/v1SubmissionHint'
+        description: Подсказка, доступная без повторного вызова модели.
+    description: CreateSubmissionHintResponse — первоначальный ответ или его сохранённый повтор.
   v1CreateSubmissionResponse:
     type: object
     properties:
@@ -1382,6 +1452,19 @@ definitions:
         type: string
         description: Токен следующей страницы; пустой, если это последняя страница.
     description: ListProblemsResponse — страница заданий.
+  v1ListSubmissionHintsResponse:
+    type: object
+    properties:
+      hints:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1SubmissionHint'
+        description: Готовые подсказки; незавершённая генерация не показывается.
+      nextPageToken:
+        type: string
+        description: Токен продолжения; пусто для текущей истории из одной записи.
+    description: 'ListSubmissionHintsResponse — история: сейчас не больше одной подсказки на посылку.'
   v1ListSubmissionsResponse:
     type: object
     properties:
@@ -1457,7 +1540,11 @@ definitions:
         type: integer
         format: int32
         description: Максимум генераций за календарные сутки UTC; ноль запрещает генерации.
-    description: Plan содержит цену в копейках и ограничения, ноль лимита означает отсутствие ограничения.
+      dailyAiHintLimit:
+        type: integer
+        format: int32
+        description: Максимум новых подсказок за календарные сутки UTC; ноль запрещает подсказки.
+    description: Plan содержит цену в копейках и ограничения; смысл нуля указан у каждого лимита.
   v1Problem:
     type: object
     properties:
@@ -1600,6 +1687,24 @@ definitions:
         format: date-time
         description: Конец проверки.
     description: Submission — посылка.
+  v1SubmissionHint:
+    type: object
+    properties:
+      id:
+        type: string
+        format: int64
+        description: Идентификатор записи истории.
+      text:
+        type: string
+        description: Текст на русском языке, не больше 1000 символов.
+      isFallback:
+        type: boolean
+        description: Модель дважды выдала небезопасный ответ; возвращена общая подсказка.
+      createTime:
+        type: string
+        format: date-time
+        description: Время сохранения подсказки.
+    description: SubmissionHint — сохранённая наводящая подсказка без кода решения.
   v1SubmissionStatus:
     type: string
     enum:

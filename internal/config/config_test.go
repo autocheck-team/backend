@@ -89,3 +89,26 @@ func TestLLMConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestHintConfig(t *testing.T) {
+	// arrange
+	t.Setenv("DATABASE_URL", "postgres://localhost/autocheck")
+	t.Setenv("HINT_TIMEOUT", "")
+	t.Setenv("HINT_QUERY_TIMEOUT", "")
+	// act
+	cfg, err := Load()
+	// assert
+	if err != nil || cfg.HintTimeout != 5*time.Minute || cfg.HintQueryTimeout != 5*time.Second {
+		t.Fatalf("invalid hint defaults: %v", err)
+	}
+	for _, key := range []string{"HINT_TIMEOUT", "HINT_QUERY_TIMEOUT"} {
+		for _, value := range []string{"0s", "-1s", "bad"} {
+			t.Run(key+"_"+value, func(t *testing.T) {
+				t.Setenv(key, value)
+				if _, err := Load(); err == nil {
+					t.Fatal("invalid hint timeout accepted")
+				}
+			})
+		}
+	}
+}
