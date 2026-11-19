@@ -14,6 +14,7 @@ import (
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
 	"github.com/autocheck-team/backend/internal/judge"
+	"github.com/autocheck-team/backend/internal/playground"
 	"github.com/autocheck-team/backend/internal/sandbox"
 	"github.com/autocheck-team/backend/internal/storage"
 
@@ -73,8 +74,14 @@ func run(log *slog.Logger) error {
 		Log: log, ID: cfg.WorkerID, Concurrency: cfg.WorkerConcurrency, PollInterval: cfg.WorkerPollInterval,
 	}
 	log.Info("worker started", "id", cfg.WorkerID, "concurrency", cfg.WorkerConcurrency)
+	playgroundWorker := playground.Worker{
+		Repository: playground.NewRepository(pool, cfg.PlaygroundQueryTimeout),
+		Runner:     playground.NewRunner(sb), Log: log, ID: cfg.WorkerID,
+		Concurrency: cfg.WorkerConcurrency, PollInterval: cfg.WorkerPollInterval,
+	}
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error { worker.Run(ctx); return nil })
+	group.Go(func() error { playgroundWorker.Run(ctx); return nil })
 	group.Go(func() error { sweep(ctx, log, sb, metrics); return nil })
 	group.Go(func() error {
 		return judge.ObserveQueue(ctx, repo, metrics, log, cfg.MetricsPollInterval, cfg.MetricsQueryTimeout)

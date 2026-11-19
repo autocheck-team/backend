@@ -23,6 +23,7 @@ type Config struct {
 	MaterialQueryTimeout       time.Duration
 	MaterialObjectTimeout      time.Duration
 	MaterialMaxAttachmentBytes int64
+	PlaygroundQueryTimeout     time.Duration
 
 	S3Endpoint string
 	// S3PublicEndpoint — адрес хранилища для браузера (presigned-ссылки).
@@ -108,6 +109,11 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("invalid material attachment limit: %w", err))
 	} else if c.MaterialMaxAttachmentBytes <= 0 || c.MaterialMaxAttachmentBytes > 64<<20 {
 		errs = append(errs, errors.New("material attachment limit must be between 1 and 67108864 bytes"))
+	}
+	if c.PlaygroundQueryTimeout, err = time.ParseDuration(getenv("PLAYGROUND_QUERY_TIMEOUT", "5s")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid playground query timeout: %w", err))
+	} else if c.PlaygroundQueryTimeout <= 0 {
+		errs = append(errs, errors.New("playground query timeout must be positive"))
 	}
 	if c.WorkerConcurrency, err = strconv.Atoi(getenv("WORKER_CONCURRENCY", "2")); err != nil {
 		errs = append(errs, fmt.Errorf("WORKER_CONCURRENCY: %w", err))

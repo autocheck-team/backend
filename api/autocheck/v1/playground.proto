@@ -1,0 +1,247 @@
+syntax = "proto3";
+
+package autocheck.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+// PlaygroundService хранит личные мини-проекты и ставит их запуски в очередь воркера.
+service PlaygroundService {
+  // CreateProject создаёт свой проект; повтор ключа возвращает первоначальный проект.
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {
+    option (google.api.http) = {
+      post: "/v1/projects"
+      body: "*"
+    };
+  }
+  // GetProject читает свой проект; администратор может читать любой.
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {
+    option (google.api.http) = {get: "/v1/projects/{id}"};
+  }
+  // ListProjects возвращает только свои проекты, новые первыми, включая администратора.
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {
+    option (google.api.http) = {get: "/v1/projects"};
+  }
+  // UpdateProject полностью заменяет название, язык и файлы своего проекта.
+  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {
+    option (google.api.http) = {
+      put: "/v1/projects/{id}"
+      body: "*"
+    };
+  }
+  // DeleteProject удаляет свой проект; уже принятые запуски сохраняются.
+  rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse) {
+    option (google.api.http) = {delete: "/v1/projects/{id}"};
+  }
+  // RunProject сохраняет снимок проекта и stdin; компиляция расходует общую квоту billing.
+  rpc RunProject(RunProjectRequest) returns (RunProjectResponse) {
+    option (google.api.http) = {
+      post: "/v1/projects/{id}:run"
+      body: "*"
+    };
+  }
+  // GetProjectRun возвращает состояние и результат своего запуска или любого для admin.
+  rpc GetProjectRun(GetProjectRunRequest) returns (GetProjectRunResponse) {
+    option (google.api.http) = {get: "/v1/project-runs/{id}"};
+  }
+}
+
+// ProjectFile — UTF-8 файл в корне рабочего каталога без вложенных путей.
+message ProjectFile {
+  // Уникальное имя: ASCII буквы, цифры, подчёркивание, точка и дефис; начинается с буквы или цифры.
+  string name = 1 [(buf.validate.field).string = {
+    max_bytes: 100
+    pattern: "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+  }];
+  // Содержимое UTF-8, включая пустой файл; суммарно не более 262144 байт на проект.
+  string content = 2 [(buf.validate.field).string.max_bytes = 262144];
+}
+
+// Project — личный мини-проект; максимум 20 проектов на пользователя.
+message Project {
+  // Идентификатор UUID.
+  string id = 1;
+  // Владелец UUID.
+  string user_id = 2;
+  // Название от 1 до 200 символов.
+  string title = 3;
+  // Активный язык из languages; файл source_file этого языка обязателен.
+  string language_id = 4;
+  // От 1 до 20 файлов, общий размер содержимого до 256 КиБ.
+  repeated ProjectFile files = 5;
+  // Время создания.
+  google.protobuf.Timestamp create_time = 6;
+  // Время последнего изменения.
+  google.protobuf.Timestamp update_time = 7;
+}
+
+// ProjectRunStatus — этап исполнения снимка мини-проекта.
+enum ProjectRunStatus {
+  // Состояние не задано.
+  PROJECT_RUN_STATUS_UNSPECIFIED = 0;
+  // Ожидает воркера, включая системные повторы.
+  PROJECT_RUN_STATUS_QUEUED = 1;
+  // Компилируется.
+  PROJECT_RUN_STATUS_COMPILING = 2;
+  // Выполняется.
+  PROJECT_RUN_STATUS_RUNNING = 3;
+  // Программа завершена, включая CE, TL, ML и RE.
+  PROJECT_RUN_STATUS_DONE = 4;
+  // Три попытки завершились системной ошибкой.
+  PROJECT_RUN_STATUS_FAILED = 5;
+}
+
+// ProjectRun — результат без исходников; лимит исполнения 5 секунд / 256 МиБ, сеть отключена.
+message ProjectRun {
+  // Идентификатор запуска UUID.
+  string id = 1;
+  // Проект UUID, сохраняется после удаления проекта.
+  string project_id = 2;
+  // Этап исполнения.
+  ProjectRunStatus status = 3;
+  // Пусто до завершения; OK, CE, TL, ML, RE или SE.
+  string verdict = 4;
+  // Код возврата компилятора при CE, иначе программы; отсутствует до результата.
+  optional int32 exit_code = 5;
+  // Префикс stdout, до 64 КиБ UTF-8.
+  string stdout = 6;
+  // Префикс stderr, до 64 КиБ UTF-8.
+  string stderr = 7;
+  // Вывод компилятора, до 64 КиБ UTF-8.
+  string compile_log = 8;
+  // Был ли обрезан stdout, stderr или compile_log либо превышен лимит вывода песочницы.
+  bool is_output_truncated = 9;
+  // Реальное время исполнения или неуспешной компиляции, миллисекунды.
+  int64 time_ms = 10;
+  // Приблизительный пик памяти, КиБ, по Docker stats.
+  int64 memory_kb = 11;
+  // Время приёма запроса.
+  google.protobuf.Timestamp create_time = 12;
+  // Время последнего изменения состояния.
+  google.protobuf.Timestamp update_time = 13;
+}
+
+// CreateProjectRequest — создание проекта с идемпотентным ключом.
+message CreateProjectRequest {
+  // Название; не только пробелы.
+  string title = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+    pattern: "[^\\s]"
+  }];
+  // Активный язык из каталога.
+  string language_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  // Файлы с уникальными именами, включая source_file выбранного языка.
+  repeated ProjectFile files = 3 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 20
+  }];
+  // Обязательный UUID; повтор не расходует лимит проектов.
+  string client_request_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+// CreateProjectResponse — сохранённый проект.
+message CreateProjectResponse {
+  // Созданный или первоначальный проект.
+  Project project = 1;
+}
+
+// GetProjectRequest — чтение проекта.
+message GetProjectRequest {
+  // UUID проекта.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetProjectResponse — доступный проект.
+message GetProjectResponse {
+  // Проект с файлами.
+  Project project = 1;
+}
+
+// ListProjectsRequest — keyset-пагинация своих проектов.
+message ListProjectsRequest {
+  // 0 означает 20, максимум 100.
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  // Непрозрачный токен; пусто для первой страницы.
+  string page_token = 2 [(buf.validate.field).string.max_len = 100];
+}
+
+// ListProjectsResponse — страница проектов.
+message ListProjectsResponse {
+  // Проекты с файлами, новые первыми.
+  repeated Project projects = 1;
+  // Пусто для последней страницы.
+  string next_page_token = 2;
+}
+
+// UpdateProjectRequest — полная замена редактируемых полей своего проекта.
+message UpdateProjectRequest {
+  // UUID проекта.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Название; не только пробелы.
+  string title = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+    pattern: "[^\\s]"
+  }];
+  // Активный язык из каталога.
+  string language_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  // Полный новый набор файлов, включая source_file языка.
+  repeated ProjectFile files = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 20
+  }];
+}
+
+// UpdateProjectResponse — обновлённый проект.
+message UpdateProjectResponse {
+  // Проект после замены.
+  Project project = 1;
+}
+
+// DeleteProjectRequest — удаление своего проекта.
+message DeleteProjectRequest {
+  // UUID проекта.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DeleteProjectResponse подтверждает удаление.
+message DeleteProjectResponse {}
+
+// RunProjectRequest — приём снимка в очередь.
+message RunProjectRequest {
+  // UUID своего проекта.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Стандартный ввод UTF-8, до 64 КиБ; пустое значение означает EOF.
+  string stdin = 2 [(buf.validate.field).string.max_bytes = 65536];
+  // Обязательный UUID; повтор для того же проекта возвращает прежний запуск без расхода квоты.
+  string client_request_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+// RunProjectResponse — принятый запуск, результат запрашивается отдельно.
+message RunProjectResponse {
+  // Запуск со статусом queued или первоначальный результат при повторе.
+  ProjectRun run = 1;
+}
+
+// GetProjectRunRequest — чтение состояния запуска.
+message GetProjectRunRequest {
+  // UUID запуска.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetProjectRunResponse — состояние и сохранённый результат.
+message GetProjectRunResponse {
+  // Запуск; done и failed — конечные состояния.
+  ProjectRun run = 1;
+}

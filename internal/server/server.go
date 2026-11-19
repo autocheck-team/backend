@@ -46,6 +46,7 @@ type Services struct {
 	Feedback   v1.FeedbackServiceServer
 	Billing    v1.BillingServiceServer
 	Material   v1.MaterialServiceServer
+	Playground v1.PlaygroundServiceServer
 }
 
 // Server — gRPC-сервер и HTTP-шлюз.
@@ -96,6 +97,9 @@ func New(
 	if svc.Material != nil {
 		v1.RegisterMaterialServiceServer(g, svc.Material)
 	}
+	if svc.Playground != nil {
+		v1.RegisterPlaygroundServiceServer(g, svc.Playground)
+	}
 
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(g, hs)
@@ -138,6 +142,7 @@ func (s *Server) Run(ctx context.Context) error {
 		v1.RegisterFeedbackServiceHandler,
 		v1.RegisterBillingServiceHandler,
 		v1.RegisterMaterialServiceHandler,
+		v1.RegisterPlaygroundServiceHandler,
 	} {
 		if err := register(ctx, gw, conn); err != nil {
 			return fmt.Errorf("register gateway: %w", err)

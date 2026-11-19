@@ -18,6 +18,7 @@ import (
 	"github.com/autocheck-team/backend/internal/db"
 	"github.com/autocheck-team/backend/internal/feedback"
 	"github.com/autocheck-team/backend/internal/material"
+	"github.com/autocheck-team/backend/internal/playground"
 	"github.com/autocheck-team/backend/internal/problem"
 	"github.com/autocheck-team/backend/internal/server"
 	"github.com/autocheck-team/backend/internal/storage"
@@ -110,6 +111,7 @@ func run(log *slog.Logger) error {
 		Billing:    billingService,
 		Problem:    problem.NewService(problem.NewRepository(pool), objects, validator),
 		Submission: submissionService,
+		Playground: playground.New(playground.NewRepository(pool, cfg.PlaygroundQueryTimeout), validator),
 		Feedback:   feedback.NewService(feedback.NewRepository(pool, cfg.FeedbackQueryTimeout), validator),
 	})
 	group, ctx := errgroup.WithContext(ctx)
