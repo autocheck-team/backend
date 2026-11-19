@@ -8,7 +8,7 @@ import (
 )
 
 // Verdict учитывает признаки в порядке надёжности: OOM и wall timeout важнее кода выхода.
-func Verdict(r sandbox.Result, timeLimit time.Duration, memoryBytes int64) string {
+func Verdict(r sandbox.Result, timeLimit time.Duration) string {
 	switch {
 	case r.OOMKilled:
 		return "ML"
@@ -16,7 +16,10 @@ func Verdict(r sandbox.Result, timeLimit time.Duration, memoryBytes int64) strin
 		return "TL"
 	case (r.ExitCode == 137 || r.ExitCode == 152) && r.CPUTime >= timeLimit:
 		return "TL"
-	case r.ExitCode == 137 && r.PeakMemoryBytes >= memoryBytes-memoryBytes/10:
+	// SIGKILL без нашего таймаута и лимита CPU в песочнице даёт только OOM killer.
+	// Флаг OOMKilled на cgroup v2 ненадёжен, когда убит потомок tini, а пик памяти
+	// снимается опросом и при быстром росте занижен, поэтому по нему не судим.
+	case r.ExitCode == 137 && !r.OutputLimitExceeded:
 		return "ML"
 	case r.OutputLimitExceeded, r.ExitCode != 0:
 		return "RE"
