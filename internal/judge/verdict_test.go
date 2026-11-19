@@ -22,13 +22,14 @@ func TestVerdict(t *testing.T) {
 		{"cpu_sigxcpu", sandbox.Result{ExitCode: 152, CPUTime: time.Second}, "TL"},
 		{"sigxcpu_without_cpu", sandbox.Result{ExitCode: 152}, "RE"},
 		{"sigkill_near_memory", sandbox.Result{ExitCode: 137, PeakMemoryBytes: 950}, "ML"},
-		{"sigkill_other", sandbox.Result{ExitCode: 137, PeakMemoryBytes: 100}, "RE"},
+		{"sigkill_low_sampled_peak", sandbox.Result{ExitCode: 137, PeakMemoryBytes: 100}, "ML"},
+		{"sigkill_after_output_limit", sandbox.Result{ExitCode: 137, OutputLimitExceeded: true}, "RE"},
 		{"output", sandbox.Result{OutputLimitExceeded: true}, "RE"},
 		{"exit", sandbox.Result{ExitCode: 1}, "RE"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := Verdict(tt.result, time.Second, 1024); got != tt.want {
+			if got := Verdict(tt.result, time.Second); got != tt.want {
 				t.Fatalf("verdict=%s want=%s", got, tt.want)
 			}
 		})

@@ -207,7 +207,7 @@ func (r *Runner) Run(ctx context.Context, j Job) (outcome Outcome, runErr error)
 		if err != nil {
 			return Outcome{}, fmt.Errorf("run test %d: %w", tc.Ordinal, err)
 		}
-		verdict := Verdict(res, timeLimit, memory)
+		verdict := Verdict(res, timeLimit)
 		if verdict == "OK" {
 			if task.Problem.Checker == "custom" {
 				verdict, err = r.custom(ctx, checker, input, expected, res.Stdout)
