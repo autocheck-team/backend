@@ -276,3 +276,49 @@ REST API (gRPC `BillingService`):
 неподтверждённый платёж тестового магазина, проверяет повтор с тем же ключом и GET.
 Без `YOOKASSA_SHOP_ID` / `YOOKASSA_SECRET_KEY` этот тест пропускается. Оплата тестом
 не подтверждается; pending-платёж впоследствии отменяется самим провайдером.
+
+
+## Мониторинг и логи (HPRPR-15)
+
+API и worker отдают Prometheus `/metrics` на **отдельном** `METRICS_ADDR` (по умолчанию
+`:9100`). При одновременном запуске процессов на хосте задайте worker другой адрес,
+например `METRICS_ADDR=:9101 make run-worker`. В Compose у процессов разные сетевые
+пространства, поэтому оба слушают 9100 без публикации порта на хост.
+
+| Метрика | Смысл |
+| --- | --- |
+| `autocheck_requests_total{transport,method,code}` | Завершённые gRPC/HTTP-запросы, включая отказы авторизации и валидации |
+| `autocheck_request_duration_seconds{transport,method}` | RED latency; watch измеряется до закрытия потока |
+| `autocheck_judge_queue_depth{state}` | Глобальная очередь: `waiting` (включая backoff и истёкшие аренды), `running` (действующие аренды) |
+| `autocheck_judge_queue_poll_success` / `autocheck_judge_queue_updated_timestamp_seconds` | Успех последнего опроса / время последнего успешного снимка |
+| `autocheck_judge_attempts_total` / `autocheck_judge_system_errors_total` | Попытки, включая повторы / системные ошибки попыток до планирования повтора |
+| `autocheck_judge_active` / `autocheck_judge_duration_seconds` | Активные проверки / длительность попытки с IO, фиксацией результата и уборкой |
+| `autocheck_judge_stage_duration_seconds{stage}` | Длительность запуска Docker для `compile` и `run` (каждый тест, включая custom checker) |
+| `autocheck_judge_verdicts_total{verdict}` | Только зафиксированные конечные вердикты; SE после исчерпания попыток или постоянной ошибки |
+| `autocheck_sandbox_cleanup_total{action,result}` | Результат закрытия workspace и периодической уборки: `workspace`/`sweep`, `success`/`error` |
+| `autocheck_billing_payments_total{event}` | Зафиксированные новые намерения оплаты (`created`) и переходы в `succeeded`; идемпотентные повторы не считаются |
+| `autocheck_billing_limit_rejections_total{limit}` | Отказы 429: `compilation` / `test_runs` |
+
+Все ряды имеют постоянную метку `service=api|worker`. В HTTP `method` содержит HTTP-метод
+и **шаблон** grpc-gateway (например `GET /v1/submissions/{id}`), неизвестные пути
+объединены в `unmatched`. В gRPC это полное имя метода, `code` — имя gRPC-кода;
+в HTTP `code` — числовой статус. В метках нет ID, исходников, токенов и сырых URL.
+Health-проверки и OpenAPI обслуживаются прежними обработчиками.
+
+Глубину очереди опрашивает worker: он уже владеет обработкой `judge_jobs`, а API не
+получает дополнительной фоновой зависимости для мониторинга. Интервал —
+`METRICS_POLL_INTERVAL=5s`, дедлайн — `METRICS_QUERY_TIMEOUT=3s` (оба положительные).
+Завершённые задания, включая оставленные в очереди терминальные SE, исключены.
+При ошибке БД сохраняется предыдущая глубина, `poll_success=0`, timestamp не меняется.
+При нескольких worker используйте **max**, а не sum для глобальной глубины;
+счётчики и локальные активные проверки суммируйте. Счётчики живут в памяти процесса,
+сбрасываются при рестарте и не заменяют бухгалтерский учёт: падение сразу после commit
+может потерять событие метрики.
+
+Логи api/worker — JSON в stdout с `service`. Записи жизненного цикла проверки содержат
+`submission_id`, `job`, `attempt`; завершённые unary RPC — метод, код и ID посылки,
+когда он известен. Тела запросов, токены и заголовки авторизации не записываются.
+Monitoring-профиль infra подключает Prometheus, provisioned Grafana dashboard и
+Loki с Alloy через Docker socket: см. README соседнего репозитория infra.
+
+Наблюдения сквозного прогона и границы проверок: [docs/monitoring.md](docs/monitoring.md).

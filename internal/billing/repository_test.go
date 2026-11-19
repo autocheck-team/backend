@@ -3,7 +3,9 @@ package billing
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/autocheck-team/backend/internal/db"
+	"github.com/autocheck-team/backend/internal/monitoring"
 )
 
 func billingDB(t *testing.T) *pgxpool.Pool {
@@ -65,6 +68,7 @@ func seedSubscriber(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 func TestRepositoryActivation(t *testing.T) {
 	pool := billingDB(t)
 	repo := NewRepository(pool)
+	repo.Metrics = monitoring.New("api")
 	userID := seedSubscriber(t, pool)
 	requestID := uuid.New()
 	payment, err := repo.Prepare(t.Context(), userID, requestID, "pro", "https://example.com/return")
@@ -143,6 +147,13 @@ func TestRepositoryActivation(t *testing.T) {
 	payments, err = repo.Payments(t.Context(), other, uuid.Nil, 10)
 	if err != nil || len(payments) != 0 {
 		t.Fatal("payments leaked to another user")
+	}
+	response := httptest.NewRecorder()
+	repo.Metrics.Handler().ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), "GET", "/metrics", nil))
+	for _, event := range []string{"created", "succeeded"} {
+		if !strings.Contains(response.Body.String(), `autocheck_billing_payments_total{event="`+event+`",service="api"} 2`) {
+			t.Fatalf("payment metric %s counted idempotent replays", event)
+		}
 	}
 }
 

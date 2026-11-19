@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/autocheck-team/backend/internal/auth"
 	"github.com/autocheck-team/backend/internal/billing"
 	"github.com/autocheck-team/backend/internal/db"
+	"github.com/autocheck-team/backend/internal/monitoring"
 	"github.com/autocheck-team/backend/internal/submission"
 	v1 "github.com/autocheck-team/backend/pkg/api/autocheck/v1"
 )
@@ -117,7 +119,10 @@ func TestBillingGateway(t *testing.T) {
 		t.Fatal(err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	service := billing.NewService(billing.NewRepository(pool), paymentProvider, logger)
+	metrics := monitoring.New("api")
+	paymentRepository := billing.NewRepository(pool)
+	paymentRepository.Metrics = metrics
+	service := billing.NewService(paymentRepository, paymentProvider, logger)
 	validator, err := protovalidate.New()
 	if err != nil {
 		t.Fatal(err)
@@ -136,9 +141,11 @@ func TestBillingGateway(t *testing.T) {
 		return addr
 	}
 	grpcAddr, httpAddr := address(), address()
-	server := New(Config{GRPCAddr: grpcAddr, HTTPAddr: httpAddr, ShutdownTimeout: time.Second}, logger, pool, authn, validator, Services{
+	submissionService := submission.NewService(submission.NewRepository(pool), billingObjects{}, nil)
+	submissionService.Metrics = metrics
+	server := New(Config{Metrics: metrics, GRPCAddr: grpcAddr, HTTPAddr: httpAddr, ShutdownTimeout: time.Second}, logger, pool, authn, validator, Services{
 		User: &v1.UnimplementedUserServiceServer{}, Problem: &v1.UnimplementedProblemServiceServer{}, Billing: service,
-		Submission: submission.NewService(submission.NewRepository(pool), billingObjects{}, nil),
+		Submission: submissionService,
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
@@ -247,6 +254,19 @@ func TestBillingGateway(t *testing.T) {
 	}
 	if code, response := request(http.MethodGet, "/v1/payments/me?pageSize=1", "", true); code != 200 || len(response["payments"].([]any)) != 1 {
 		t.Fatalf("payments=%d", code)
+	}
+	responseMetrics := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(responseMetrics, httptest.NewRequestWithContext(t.Context(), "GET", "/metrics", nil))
+	for _, line := range []string{
+		`autocheck_billing_payments_total{event="created",service="api"} 1`,
+		`autocheck_billing_payments_total{event="succeeded",service="api"} 1`,
+		`autocheck_billing_limit_rejections_total{limit="compilation",service="api"} 1`,
+		`autocheck_requests_total{code="429",method="POST /v1/problems/{problem_id}/submissions",service="api",transport="http"} 1`,
+		`autocheck_requests_total{code="ResourceExhausted",method="/autocheck.v1.SubmissionService/CreateSubmission",service="api",transport="grpc"} 1`,
+	} {
+		if !strings.Contains(responseMetrics.Body.String(), line+"\n") {
+			t.Fatalf("missing gateway metric %s", line)
+		}
 	}
 	t.Log("gateway: public routes, JWT requirement, validation, 429 with RetryInfo, checkout retry, verified webhook and pro compilation passed")
 }

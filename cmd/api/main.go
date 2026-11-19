@@ -22,10 +22,12 @@ import (
 	"github.com/autocheck-team/backend/internal/storage"
 	"github.com/autocheck-team/backend/internal/submission"
 	"github.com/autocheck-team/backend/internal/user"
+
+	"github.com/autocheck-team/backend/internal/monitoring"
 )
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	log := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "api")
 	if err := run(log); err != nil {
 		log.Error("api stopped", "err", err)
 		os.Exit(1)
@@ -87,9 +89,15 @@ func run(log *slog.Logger) error {
 	if provider != nil {
 		paymentProvider = provider
 	}
-	billingService := billing.NewService(billing.NewRepository(pool), paymentProvider, log)
+	metrics := monitoring.New("api")
+	billingRepository := billing.NewRepository(pool)
+	billingRepository.Metrics = metrics
+	billingService := billing.NewService(billingRepository, paymentProvider, log)
+	submissionService := submission.NewService(submission.NewRepository(pool), objects, events)
+	submissionService.Metrics = metrics
 	srv := server.New(server.Config{
 		GRPCAddr:           cfg.GRPCAddr,
+		Metrics:            metrics,
 		HTTPAddr:           cfg.HTTPAddr,
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
 		ShutdownTimeout:    cfg.ShutdownTimeout,
@@ -97,11 +105,12 @@ func run(log *slog.Logger) error {
 		User:       user.NewService(),
 		Billing:    billingService,
 		Problem:    problem.NewService(problem.NewRepository(pool), objects, validator),
-		Submission: submission.NewService(submission.NewRepository(pool), objects, events),
+		Submission: submissionService,
 		Feedback:   feedback.NewService(feedback.NewRepository(pool, cfg.FeedbackQueryTimeout), validator),
 	})
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error { return srv.Run(ctx) })
+	group.Go(func() error { return metrics.Run(ctx, cfg.MetricsAddr, cfg.ShutdownTimeout) })
 	group.Go(func() error { return billingService.RunSync(ctx, cfg.BillingSyncInterval) })
 	return group.Wait()
 }

@@ -25,10 +25,13 @@ import (
 
 	"github.com/autocheck-team/backend/internal/auth"
 	v1 "github.com/autocheck-team/backend/pkg/api/autocheck/v1"
+
+	"github.com/autocheck-team/backend/internal/monitoring"
 )
 
 // Config — адреса и параметры серверов.
 type Config struct {
+	Metrics            *monitoring.Metrics
 	GRPCAddr           string
 	HTTPAddr           string
 	CORSAllowedOrigins []string
@@ -57,19 +60,24 @@ func New(
 	cfg Config, log *slog.Logger, db Pinger, authn *auth.Interceptors,
 	validator protovalidate.Validator, svc Services,
 ) *Server {
+	if cfg.Metrics == nil {
+		cfg.Metrics = monitoring.New("api")
+	}
 	recoveryOpt := recovery.WithRecoveryHandlerContext(func(ctx context.Context, p any) error {
-		log.ErrorContext(ctx, "panic in handler", "panic", p)
+		monitoring.Logger(ctx, log).ErrorContext(ctx, "panic in handler", "panic", p)
 		return status.Error(codes.Internal, "внутренняя ошибка сервера")
 	})
 
 	g := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
+			cfg.Metrics.Unary(log),
 			recovery.UnaryServerInterceptor(recoveryOpt),
 			errorsUnary(log),
 			authn.Unary(),
 			protovalidatemw.UnaryServerInterceptor(validator),
 		),
 		grpc.ChainStreamInterceptor(
+			cfg.Metrics.Stream(log),
 			recovery.StreamServerInterceptor(recoveryOpt),
 			errorsStream(log),
 			authn.Stream(),
@@ -117,7 +125,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	defer func() { _ = conn.Close() }()
 
-	gw := runtime.NewServeMux()
+	gw := runtime.NewServeMux(runtime.WithMiddlewares(s.cfg.Metrics.GatewayRoute))
 	for _, register := range []func(context.Context, *runtime.ServeMux, *grpc.ClientConn) error{
 		v1.RegisterUserServiceHandler,
 		v1.RegisterProblemServiceHandler,
@@ -132,7 +140,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	httpSrv := &http.Server{
 		Addr:              s.cfg.HTTPAddr,
-		Handler:           cors(s.cfg.CORSAllowedOrigins, s.httpMux(gw)),
+		Handler:           cors(s.cfg.CORSAllowedOrigins, s.httpMux(s.cfg.Metrics.Gateway(gw))),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -192,7 +200,7 @@ func errorsUnary(log *slog.Logger) grpc.UnaryServerInterceptor {
 		if _, ok := status.FromError(err); ok {
 			return resp, err
 		}
-		log.ErrorContext(ctx, "rpc failed", "method", info.FullMethod, "err", err)
+		monitoring.Logger(ctx, log).ErrorContext(ctx, "rpc failed", "method", info.FullMethod, "err", err)
 		return nil, status.Error(codes.Internal, "внутренняя ошибка сервера")
 	}
 }
@@ -210,7 +218,7 @@ func errorsStream(log *slog.Logger) grpc.StreamServerInterceptor {
 		if _, ok := status.FromError(err); ok {
 			return err
 		}
-		log.ErrorContext(stream.Context(), "stream failed", "method", info.FullMethod, "err", err)
+		monitoring.Logger(stream.Context(), log).ErrorContext(stream.Context(), "stream failed", "method", info.FullMethod, "err", err)
 		return status.Error(codes.Internal, "внутренняя ошибка сервера")
 	}
 }

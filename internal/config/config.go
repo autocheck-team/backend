@@ -12,6 +12,9 @@ import (
 
 // Config — настройки api, worker и migrate.
 type Config struct {
+	MetricsAddr          string
+	MetricsPollInterval  time.Duration
+	MetricsQueryTimeout  time.Duration
 	HTTPAddr             string
 	GRPCAddr             string
 	DatabaseURL          string
@@ -52,6 +55,7 @@ func Load() (Config, error) {
 		YookassaShopID:    os.Getenv("YOOKASSA_SHOP_ID"),
 		YookassaSecretKey: os.Getenv("YOOKASSA_SECRET_KEY"),
 		YookassaAPIURL:    getenv("YOOKASSA_API_URL", "https://api.yookassa.ru/v3"),
+		MetricsAddr:       getenv("METRICS_ADDR", ":9100"),
 		HTTPAddr:          getenv("HTTP_ADDR", ":8080"),
 		GRPCAddr:          getenv("GRPC_ADDR", ":9090"),
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
@@ -107,6 +111,25 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("BILLING_SYNC_INTERVAL: %w", err))
 	} else if c.BillingSyncInterval <= 0 {
 		errs = append(errs, errors.New("BILLING_SYNC_INTERVAL must be positive"))
+	}
+	for _, setting := range []struct {
+		name     string
+		fallback string
+		target   *time.Duration
+	}{
+		{"METRICS_POLL_INTERVAL", "5s", &c.MetricsPollInterval},
+		{"METRICS_QUERY_TIMEOUT", "3s", &c.MetricsQueryTimeout},
+	} {
+		duration, parseErr := time.ParseDuration(getenv(setting.name, setting.fallback))
+		if parseErr != nil {
+			errs = append(errs, fmt.Errorf("parse %s: %w", setting.name, parseErr))
+			continue
+		}
+		if duration <= 0 {
+			errs = append(errs, fmt.Errorf("%s must be positive", setting.name))
+			continue
+		}
+		*setting.target = duration
 	}
 	return c, errors.Join(errs...)
 }
