@@ -12,11 +12,12 @@ import (
 
 // Config — настройки api, worker и migrate.
 type Config struct {
-	HTTPAddr             string
-	GRPCAddr             string
-	DatabaseURL          string
-	ShutdownTimeout      time.Duration
-	FeedbackQueryTimeout time.Duration
+	HTTPAddr               string
+	GRPCAddr               string
+	DatabaseURL            string
+	ShutdownTimeout        time.Duration
+	FeedbackQueryTimeout   time.Duration
+	PlaygroundQueryTimeout time.Duration
 
 	S3Endpoint string
 	// S3PublicEndpoint — адрес хранилища для браузера (presigned-ссылки).
@@ -86,6 +87,11 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("invalid feedback query timeout: %w", err))
 	} else if c.FeedbackQueryTimeout <= 0 {
 		errs = append(errs, errors.New("feedback query timeout must be positive"))
+	}
+	if c.PlaygroundQueryTimeout, err = time.ParseDuration(getenv("PLAYGROUND_QUERY_TIMEOUT", "5s")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid playground query timeout: %w", err))
+	} else if c.PlaygroundQueryTimeout <= 0 {
+		errs = append(errs, errors.New("playground query timeout must be positive"))
 	}
 	if c.WorkerConcurrency, err = strconv.Atoi(getenv("WORKER_CONCURRENCY", "2")); err != nil {
 		errs = append(errs, fmt.Errorf("WORKER_CONCURRENCY: %w", err))

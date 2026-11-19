@@ -45,6 +45,11 @@ func Snapshot(ctx context.Context, query Queryer, userID uuid.UUID) (Limits, err
   JOIN plans p ON p.code=(SELECT code FROM effective)
   WHERE s.user_id=$1 AND cardinality(l.compile_cmd)>0
    AND s.created_at>now()-make_interval(secs=>p.compilation_window_seconds)
+  UNION ALL
+  SELECT r.created_at FROM playground_runs r
+  JOIN plans p ON p.code=(SELECT code FROM effective)
+  WHERE r.user_id=$1 AND r.is_compiled
+   AND r.created_at>now()-make_interval(secs=>p.compilation_window_seconds)
  )
  SELECT p.code,p.name,p.amount_kopecks,p.period_days,p.compilation_limit,p.compilation_window_seconds,p.monthly_test_run_limit,
   CASE WHEN sub.user_id IS NULL THEN 'free' WHEN sub.status='active' AND sub.ends_at<=now() THEN 'expired' ELSE sub.status END,
@@ -118,4 +123,20 @@ func (r *Repository) Limits(ctx context.Context, userID uuid.UUID) (Limits, erro
 	ctx, cancel := context.WithTimeout(ctx, databaseTimeout)
 	defer cancel()
 	return Snapshot(ctx, r.pool, userID)
+}
+
+// CheckCompilation проверяет общую квоту компиляций под блокировкой строки users.
+// Интерпретируемые запуски не расходуют квоту компиляций или тестовых прогонов.
+func CheckCompilation(ctx context.Context, tx pgx.Tx, userID uuid.UUID, compiled bool) error {
+	if !compiled {
+		return nil
+	}
+	limits, err := Snapshot(ctx, tx, userID)
+	if err != nil {
+		return fmt.Errorf("check compilation quota: %w", err)
+	}
+	if limits.RetryAfter > 0 {
+		return &LimitError{RetryAfter: limits.RetryAfter}
+	}
+	return nil
 }

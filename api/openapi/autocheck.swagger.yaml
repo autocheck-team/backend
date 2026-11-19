@@ -10,6 +10,8 @@ tags:
     description: BillingService управляет оплатой доступа и показывает доступные квоты.
   - name: FeedbackService
     description: FeedbackService — запросы пользователей об изменениях платформы.
+  - name: PlaygroundService
+    description: PlaygroundService хранит личные мини-проекты и ставит их запуски в очередь воркера.
   - name: ProblemService
     description: ProblemService — задания, тест-кейсы и языки программирования.
   - name: SubmissionService
@@ -631,6 +633,167 @@ paths:
             $ref: '#/definitions/ProblemServiceConfirmTestCaseBody'
       tags:
         - ProblemService
+  /v1/project-runs/{id}:
+    get:
+      summary: GetProjectRun возвращает состояние и результат своего запуска или любого для admin.
+      operationId: PlaygroundService_GetProjectRun
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetProjectRunResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID запуска.
+          in: path
+          required: true
+          type: string
+      tags:
+        - PlaygroundService
+  /v1/projects:
+    get:
+      summary: ListProjects возвращает только свои проекты, новые первыми, включая администратора.
+      operationId: PlaygroundService_ListProjects
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1ListProjectsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: pageSize
+          description: 0 означает 20, максимум 100.
+          in: query
+          required: false
+          type: integer
+          format: int32
+        - name: pageToken
+          description: Непрозрачный токен; пусто для первой страницы.
+          in: query
+          required: false
+          type: string
+      tags:
+        - PlaygroundService
+    post:
+      summary: CreateProject создаёт свой проект; повтор ключа возвращает первоначальный проект.
+      operationId: PlaygroundService_CreateProject
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1CreateProjectResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: CreateProjectRequest — создание проекта с идемпотентным ключом.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1CreateProjectRequest'
+      tags:
+        - PlaygroundService
+  /v1/projects/{id}:
+    get:
+      summary: GetProject читает свой проект; администратор может читать любой.
+      operationId: PlaygroundService_GetProject
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1GetProjectResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID проекта.
+          in: path
+          required: true
+          type: string
+      tags:
+        - PlaygroundService
+    delete:
+      summary: DeleteProject удаляет свой проект; уже принятые запуски сохраняются.
+      operationId: PlaygroundService_DeleteProject
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1DeleteProjectResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID проекта.
+          in: path
+          required: true
+          type: string
+      tags:
+        - PlaygroundService
+    put:
+      summary: UpdateProject полностью заменяет название, язык и файлы своего проекта.
+      operationId: PlaygroundService_UpdateProject
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1UpdateProjectResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID проекта.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/PlaygroundServiceUpdateProjectBody'
+      tags:
+        - PlaygroundService
+  /v1/projects/{id}:run:
+    post:
+      summary: RunProject сохраняет снимок проекта и stdin; компиляция расходует общую квоту billing.
+      operationId: PlaygroundService_RunProject
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1RunProjectResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: id
+          description: UUID своего проекта.
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/PlaygroundServiceRunProjectBody'
+      tags:
+        - PlaygroundService
   /v1/submissions:
     get:
       summary: |-
@@ -809,6 +972,32 @@ definitions:
         type: string
         description: Комментарий до 5000 символов; пустое значение очищает комментарий.
     description: UpdateFeedbackRequestRequest — полная замена статуса и комментария администратором.
+  PlaygroundServiceRunProjectBody:
+    type: object
+    properties:
+      stdin:
+        type: string
+        description: Стандартный ввод UTF-8, до 64 КиБ; пустое значение означает EOF.
+      clientRequestId:
+        type: string
+        description: Обязательный UUID; повтор для того же проекта возвращает прежний запуск без расхода квоты.
+    description: RunProjectRequest — приём снимка в очередь.
+  PlaygroundServiceUpdateProjectBody:
+    type: object
+    properties:
+      title:
+        type: string
+        description: Название; не только пробелы.
+      languageId:
+        type: string
+        description: Активный язык из каталога.
+      files:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1ProjectFile'
+        description: Полный новый набор файлов, включая source_file языка.
+    description: UpdateProjectRequest — полная замена редактируемых полей своего проекта.
   ProblemServiceConfirmCheckerBody:
     type: object
     description: ConfirmCheckerRequest — подтверждение загрузки чекера.
@@ -943,6 +1132,32 @@ definitions:
       problem:
         $ref: '#/definitions/v1Problem'
     description: CreateProblemResponse — созданное задание.
+  v1CreateProjectRequest:
+    type: object
+    properties:
+      title:
+        type: string
+        description: Название; не только пробелы.
+      languageId:
+        type: string
+        description: Активный язык из каталога.
+      files:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1ProjectFile'
+        description: Файлы с уникальными именами, включая source_file выбранного языка.
+      clientRequestId:
+        type: string
+        description: Обязательный UUID; повтор не расходует лимит проектов.
+    description: CreateProjectRequest — создание проекта с идемпотентным ключом.
+  v1CreateProjectResponse:
+    type: object
+    properties:
+      project:
+        $ref: '#/definitions/v1Project'
+        description: Созданный или первоначальный проект.
+    description: CreateProjectResponse — сохранённый проект.
   v1CreateSubmissionResponse:
     type: object
     properties:
@@ -968,6 +1183,9 @@ definitions:
   v1DeleteProblemResponse:
     type: object
     description: DeleteProblemResponse — ответ на удаление задания.
+  v1DeleteProjectResponse:
+    type: object
+    description: DeleteProjectResponse подтверждает удаление.
   v1DeleteTestCaseResponse:
     type: object
     description: DeleteTestCaseResponse — ответ на удаление теста.
@@ -1104,6 +1322,20 @@ definitions:
       problem:
         $ref: '#/definitions/v1Problem'
     description: GetProblemResponse — задание.
+  v1GetProjectResponse:
+    type: object
+    properties:
+      project:
+        $ref: '#/definitions/v1Project'
+        description: Проект с файлами.
+    description: GetProjectResponse — доступный проект.
+  v1GetProjectRunResponse:
+    type: object
+    properties:
+      run:
+        $ref: '#/definitions/v1ProjectRun'
+        description: Запуск; done и failed — конечные состояния.
+    description: GetProjectRunResponse — состояние и сохранённый результат.
   v1GetSubmissionReportResponse:
     type: object
     properties:
@@ -1223,6 +1455,19 @@ definitions:
         type: string
         description: Токен следующей страницы; пустой, если это последняя страница.
     description: ListProblemsResponse — страница заданий.
+  v1ListProjectsResponse:
+    type: object
+    properties:
+      projects:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1Project'
+        description: Проекты с файлами, новые первыми.
+      nextPageToken:
+        type: string
+        description: Пусто для последней страницы.
+    description: ListProjectsResponse — страница проектов.
   v1ListSubmissionsResponse:
     type: object
     properties:
@@ -1360,6 +1605,113 @@ definitions:
         description: Время последнего изменения.
         readOnly: true
     description: Problem — задание.
+  v1Project:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор UUID.
+      userId:
+        type: string
+        description: Владелец UUID.
+      title:
+        type: string
+        description: Название от 1 до 200 символов.
+      languageId:
+        type: string
+        description: Активный язык из languages; файл source_file этого языка обязателен.
+      files:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1ProjectFile'
+        description: От 1 до 20 файлов, общий размер содержимого до 256 КиБ.
+      createTime:
+        type: string
+        format: date-time
+        description: Время создания.
+      updateTime:
+        type: string
+        format: date-time
+        description: Время последнего изменения.
+    description: Project — личный мини-проект; максимум 20 проектов на пользователя.
+  v1ProjectFile:
+    type: object
+    properties:
+      name:
+        type: string
+        description: 'Уникальное имя: ASCII буквы, цифры, подчёркивание, точка и дефис; начинается с буквы или цифры.'
+      content:
+        type: string
+        description: Содержимое UTF-8, включая пустой файл; суммарно не более 262144 байт на проект.
+    description: ProjectFile — UTF-8 файл в корне рабочего каталога без вложенных путей.
+  v1ProjectRun:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Идентификатор запуска UUID.
+      projectId:
+        type: string
+        description: Проект UUID, сохраняется после удаления проекта.
+      status:
+        $ref: '#/definitions/v1ProjectRunStatus'
+        description: Этап исполнения.
+      verdict:
+        type: string
+        description: Пусто до завершения; OK, CE, TL, ML, RE или SE.
+      exitCode:
+        type: integer
+        format: int32
+        description: Код возврата компилятора при CE, иначе программы; отсутствует до результата.
+      stdout:
+        type: string
+        description: Префикс stdout, до 64 КиБ UTF-8.
+      stderr:
+        type: string
+        description: Префикс stderr, до 64 КиБ UTF-8.
+      compileLog:
+        type: string
+        description: Вывод компилятора, до 64 КиБ UTF-8.
+      isOutputTruncated:
+        type: boolean
+        description: Был ли обрезан stdout, stderr или compile_log либо превышен лимит вывода песочницы.
+      timeMs:
+        type: string
+        format: int64
+        description: Реальное время исполнения или неуспешной компиляции, миллисекунды.
+      memoryKb:
+        type: string
+        format: int64
+        description: Приблизительный пик памяти, КиБ, по Docker stats.
+      createTime:
+        type: string
+        format: date-time
+        description: Время приёма запроса.
+      updateTime:
+        type: string
+        format: date-time
+        description: Время последнего изменения состояния.
+    description: ProjectRun — результат без исходников; лимит исполнения 5 секунд / 256 МиБ, сеть отключена.
+  v1ProjectRunStatus:
+    type: string
+    enum:
+      - PROJECT_RUN_STATUS_UNSPECIFIED
+      - PROJECT_RUN_STATUS_QUEUED
+      - PROJECT_RUN_STATUS_COMPILING
+      - PROJECT_RUN_STATUS_RUNNING
+      - PROJECT_RUN_STATUS_DONE
+      - PROJECT_RUN_STATUS_FAILED
+    default: PROJECT_RUN_STATUS_UNSPECIFIED
+    description: |-
+      ProjectRunStatus — этап исполнения снимка мини-проекта.
+
+       - PROJECT_RUN_STATUS_UNSPECIFIED: Состояние не задано.
+       - PROJECT_RUN_STATUS_QUEUED: Ожидает воркера, включая системные повторы.
+       - PROJECT_RUN_STATUS_COMPILING: Компилируется.
+       - PROJECT_RUN_STATUS_RUNNING: Выполняется.
+       - PROJECT_RUN_STATUS_DONE: Программа завершена, включая CE, TL, ML и RE.
+       - PROJECT_RUN_STATUS_FAILED: Три попытки завершились системной ошибкой.
   v1ReportText:
     type: object
     properties:
@@ -1384,6 +1736,13 @@ definitions:
        - ROLE_STUDENT: Студент: решает задания и отправляет посылки.
        - ROLE_AUTHOR: Автор заданий: создаёт задания и тесты.
        - ROLE_ADMIN: Администратор платформы.
+  v1RunProjectResponse:
+    type: object
+    properties:
+      run:
+        $ref: '#/definitions/v1ProjectRun'
+        description: Запуск со статусом queued или первоначальный результат при повторе.
+    description: RunProjectResponse — принятый запуск, результат запрашивается отдельно.
   v1Submission:
     type: object
     properties:
@@ -1584,6 +1943,13 @@ definitions:
       problem:
         $ref: '#/definitions/v1Problem'
     description: UpdateProblemResponse — изменённое задание.
+  v1UpdateProjectResponse:
+    type: object
+    properties:
+      project:
+        $ref: '#/definitions/v1Project'
+        description: Проект после замены.
+    description: UpdateProjectResponse — обновлённый проект.
   v1User:
     type: object
     properties:

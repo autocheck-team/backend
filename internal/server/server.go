@@ -42,6 +42,7 @@ type Services struct {
 	Submission v1.SubmissionServiceServer
 	Feedback   v1.FeedbackServiceServer
 	Billing    v1.BillingServiceServer
+	Playground v1.PlaygroundServiceServer
 }
 
 // Server — gRPC-сервер и HTTP-шлюз.
@@ -84,6 +85,10 @@ func New(
 		v1.RegisterBillingServiceServer(g, svc.Billing)
 	}
 
+	if svc.Playground != nil {
+		v1.RegisterPlaygroundServiceServer(g, svc.Playground)
+	}
+
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(g, hs)
 	reflection.Register(g)
@@ -124,6 +129,7 @@ func (s *Server) Run(ctx context.Context) error {
 		v1.RegisterSubmissionServiceHandler,
 		v1.RegisterFeedbackServiceHandler,
 		v1.RegisterBillingServiceHandler,
+		v1.RegisterPlaygroundServiceHandler,
 	} {
 		if err := register(ctx, gw, conn); err != nil {
 			return fmt.Errorf("register gateway: %w", err)
