@@ -1,0 +1,47 @@
+name: Integration E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: backend
+      - uses: actions/checkout@v7
+        with:
+          repository: autocheck-team/infra
+          path: infra
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: REST, Keycloak, S3, Docker and deterministic LLM
+        working-directory: backend
+        env:
+          INFRA_DIR: ${{ github.workspace }}/infra
+        run: make test-integration
+      # Дополнительная страховка при отмене job; обычный выход очищает run.sh.
+      - name: Remove the disposable stack
+        if: always()
+        working-directory: backend
+        env:
+          BACKEND_CONTEXT: ${{ github.workspace }}/backend
+          COMPOSE_PROJECT_NAME: hprpr14-integration
+        run: >-
+          docker compose --env-file /dev/null
+          -f ../infra/compose.yaml -f test/integration/compose.yaml
+          down -v --remove-orphans --timeout 30

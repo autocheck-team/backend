@@ -32,3 +32,11 @@ proto-gen:   ## сгенерировать Go-код, gateway и openapi из ap
 proto-lint:
 	buf lint
 	buf format --diff --exit-code
+
+.PHONY: test-integration test-load
+
+test-integration:
+	./test/integration/run.sh
+
+test-load:
+	./test/integration/run.sh --load

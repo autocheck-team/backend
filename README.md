@@ -660,3 +660,21 @@ Python/C++, генератор, запрет сети, отбрасывание 
 требуют окружение проекта. `TestOpenRouterLive` делает один запрос без повторов
 при `OPENROUTER_API_KEY` или `LLM_API_KEY`, иначе пропускается. Не запускайте его
 многократно: бесплатная квота мала.
+
+## Сквозные и нагрузочные тесты (HPRPR-14)
+
+`make test-integration` собирает этот worktree, поднимает отдельный Compose-стенд
+из `../infra/compose.yaml` и `test/integration/compose.yaml`, выполняет Go E2E
+с `-race -tags=integration`, затем удаляет стенд и volumes. Для обычных клонов
+укажите `INFRA_DIR=../infra`. Нужны свободные 8080/8180/8333/9090; PostgreSQL
+использует случайный loopback-порт, чужой 5432 не затрагивается.
+
+Тесты используют настоящий REST gateway, Keycloak, presigned S3 PUT и Docker.
+ИИ работает через отдельную детерминированную OpenAI-совместимую заглушку;
+внешний LLM не вызывается. Pro и исторический расход квот задаются только
+SQL-фикстурами одноразовой БД, без расширения продового API.
+
+`make test-load` измеряет очередь при разном числе worker и `WORKER_CONCURRENCY`,
+сохраняя JSON в `test/load/results/`. Настройки, покрытие и запуск CI:
+[test/integration/README.md](test/integration/README.md).
+Методика и реальные результаты: [docs/load-testing.md](docs/load-testing.md).

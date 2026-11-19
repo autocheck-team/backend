@@ -1,0 +1,43 @@
+# Дополнение к infra/compose.yaml; пути сборки передаёт run.sh.
+x-test-env: &test-env
+  LLM_BASE_URL: http://llmstub:8099/v1
+  LLM_API_KEY: integration-only
+  LLM_MODEL: deterministic-test
+  LLM_EMBEDDING_MODEL: deterministic-embedding
+  LLM_TIMEOUT: 15s
+  RECOMMENDATION_REFRESH_INTERVAL: 1s
+  WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+  WORKER_POLL_INTERVAL: 100ms
+  YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+  YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+services:
+  postgres:
+    ports: !override ["127.0.0.1::5432"]
+  seaweedfs:
+    ports: !override ["127.0.0.1:8333:8333"]
+  keycloak:
+    ports: !override ["127.0.0.1:8180:8080"]
+  migrate:
+    image: hprpr14-migrate:local
+    build: {context: "${BACKEND_CONTEXT:?}", args: {CMD: migrate}}
+    environment: *test-env
+  api:
+    image: hprpr14-api:local
+    build: {context: "${BACKEND_CONTEXT:?}", args: {CMD: api}}
+    environment: *test-env
+    ports: !override ["127.0.0.1:8080:8080", "127.0.0.1:9090:9090"]
+    depends_on:
+      keycloak: {condition: service_healthy}
+      llmstub: {condition: service_started}
+  worker:
+    image: hprpr14-worker:local
+    build: {context: "${BACKEND_CONTEXT:?}", args: {CMD: worker}}
+    environment: *test-env
+    depends_on:
+      llmstub: {condition: service_started}
+  llmstub:
+    image: hprpr14-llmstub:local
+    build:
+      context: "${BACKEND_CONTEXT:?}"
+      dockerfile: test/integration/llmstub/Dockerfile
+    networks: [default]
