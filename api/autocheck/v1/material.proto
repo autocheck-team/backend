@@ -1,0 +1,239 @@
+syntax = "proto3";
+
+package autocheck.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+// MaterialService предоставляет учебные материалы платформы по подписке.
+service MaterialService {
+  // CreateMaterial создаёт материал; доступен только admin.
+  rpc CreateMaterial(CreateMaterialRequest) returns (CreateMaterialResponse) {
+    option (google.api.http) = {
+      post: "/v1/materials"
+      body: "*"
+    };
+  }
+  // UpdateMaterial полностью заменяет редактируемые поля; доступен только admin.
+  rpc UpdateMaterial(UpdateMaterialRequest) returns (UpdateMaterialResponse) {
+    option (google.api.http) = {
+      put: "/v1/materials/{id}"
+      body: "*"
+    };
+  }
+  // DeleteMaterial удаляет материал; доступен только admin.
+  rpc DeleteMaterial(DeleteMaterialRequest) returns (DeleteMaterialResponse) {
+    option (google.api.http) = {delete: "/v1/materials/{id}"};
+  }
+  // GetMaterial возвращает описание и, при доступе, содержимое и вложения.
+  rpc GetMaterial(GetMaterialRequest) returns (GetMaterialResponse) {
+    option (google.api.http) = {get: "/v1/materials/{id}"};
+  }
+  // ListMaterials возвращает описания по порядку, затем UUID; содержимое только через GetMaterial.
+  rpc ListMaterials(ListMaterialsRequest) returns (ListMaterialsResponse) {
+    option (google.api.http) = {
+      get: "/v1/materials"
+      additional_bindings: {get: "/v1/problems/{problem_id}/materials"}
+    };
+  }
+  // CreateMaterialAttachment выдаёт admin временную PUT-ссылку для нового вложения.
+  rpc CreateMaterialAttachment(CreateMaterialAttachmentRequest) returns (CreateMaterialAttachmentResponse) {
+    option (google.api.http) = {
+      post: "/v1/materials/{material_id}/attachments"
+      body: "*"
+    };
+  }
+  // ConfirmMaterialAttachment проверяет файл и сохраняет неизменяемую копию; только admin.
+  rpc ConfirmMaterialAttachment(ConfirmMaterialAttachmentRequest) returns (ConfirmMaterialAttachmentResponse) {
+    option (google.api.http) = {
+      post: "/v1/materials/{material_id}/attachments/{id}:confirm"
+      body: "*"
+    };
+  }
+  // DeleteMaterialAttachment удаляет вложение; доступен только admin.
+  rpc DeleteMaterialAttachment(DeleteMaterialAttachmentRequest) returns (DeleteMaterialAttachmentResponse) {
+    option (google.api.http) = {delete: "/v1/materials/{material_id}/attachments/{id}"};
+  }
+}
+
+// MaterialInput содержит полностью заменяемые поля материала.
+message MaterialInput {
+  // Заголовок, от 1 до 200 символов, не только пробелы.
+  string title = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  // Краткое описание для всех вошедших, до 2000 символов.
+  string description = 2 [(buf.validate.field).string.max_len = 2000];
+  // Markdown, от 1 до 200000 символов, не только пробелы.
+  string content_markdown = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200000
+  }];
+  // Задания (UUID), от 1 до 100 различных идентификаторов.
+  repeated string problem_ids = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 100
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  // Порядок по возрастанию, начиная с нуля.
+  int32 ordinal = 5 [(buf.validate.field).int32.gte = 0];
+  // Публикация; черновик доступен только admin.
+  bool is_published = 6;
+}
+
+// Material содержит описание и условно доступные платные поля.
+message Material {
+  // UUID материала.
+  string id = 1;
+  // Заголовок материала.
+  string title = 2;
+  // Краткое описание для всех вошедших.
+  string description = 3;
+  // Markdown; пусто при is_locked и во всех списках.
+  string content_markdown = 4;
+  // Привязанные задания (UUID).
+  repeated string problem_ids = 5;
+  // Порядок по возрастанию, начиная с нуля.
+  int32 ordinal = 6;
+  // Опубликован ли материал.
+  bool is_published = 7;
+  // Для содержимого и вложений требуется подписка Pro.
+  bool is_locked = 8;
+  // Вложения; пусто при is_locked и во всех списках, неподтверждённые видны только admin.
+  repeated MaterialAttachment attachments = 9;
+  // Момент создания.
+  google.protobuf.Timestamp create_time = 10;
+  // Момент последней правки.
+  google.protobuf.Timestamp update_time = 11;
+}
+
+// MaterialAttachment описывает вложение без внутреннего S3-ключа.
+message MaterialAttachment {
+  // UUID вложения.
+  string id = 1;
+  // Имя файла без пути.
+  string filename = 2;
+  // Проверенный MIME-тип, пусто до подтверждения.
+  string content_type = 3;
+  // Размер в байтах, ноль до подтверждения.
+  int64 size_bytes = 4;
+  // Прошло ли вложение подтверждение.
+  bool is_ready = 5;
+  // Временная GET-ссылка, пусто до подтверждения.
+  string download_url = 6;
+  // Срок GET-ссылки; отсутствует без ссылки.
+  google.protobuf.Timestamp download_expire_time = 7;
+}
+
+// CreateMaterialRequest создаёт материал идемпотентно по request_id.
+message CreateMaterialRequest {
+  // Полные данные материала.
+  MaterialInput material = 1 [(buf.validate.field).required = true];
+  // UUID операции, повторять при сетевой ошибке.
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+}
+// CreateMaterialResponse содержит созданный материал без ссылок.
+message CreateMaterialResponse {
+  // Созданный материал.
+  Material material = 1;
+}
+// UpdateMaterialRequest полностью заменяет поля, включая публикацию и связи.
+message UpdateMaterialRequest {
+  // UUID материала.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Полные новые данные.
+  MaterialInput material = 2 [(buf.validate.field).required = true];
+}
+// UpdateMaterialResponse содержит изменённый материал без ссылок.
+message UpdateMaterialResponse {
+  // Изменённый материал.
+  Material material = 1;
+}
+// DeleteMaterialRequest удаляет материал.
+message DeleteMaterialRequest {
+  // UUID материала.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+// DeleteMaterialResponse подтверждает удаление.
+message DeleteMaterialResponse {}
+// GetMaterialRequest запрашивает материал.
+message GetMaterialRequest {
+  // UUID материала.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+// GetMaterialResponse содержит материал с учётом прав.
+message GetMaterialResponse {
+  // Материал; при is_locked платные поля отсутствуют.
+  Material material = 1;
+}
+// ListMaterialsRequest задаёт страницу и необязательный фильтр.
+message ListMaterialsRequest {
+  // UUID задания, пусто для общего списка.
+  string problem_id = 1 [
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.uuid = true
+  ];
+  // Размер страницы, по умолчанию 20, максимум 100.
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  // Непрозрачный токен; фильтр при продолжении сохраняется.
+  string page_token = 3 [(buf.validate.field).string.max_len = 1024];
+}
+// ListMaterialsResponse содержит только описания материалов.
+message ListMaterialsResponse {
+  // Материалы по ordinal и UUID, без Markdown и вложений.
+  repeated Material materials = 1;
+  // Пусто на последней странице.
+  string next_page_token = 2;
+}
+// CreateMaterialAttachmentRequest резервирует новый файл.
+message CreateMaterialAttachmentRequest {
+  // UUID материала.
+  string material_id = 1 [(buf.validate.field).string.uuid = true];
+  // Имя файла (картинка или PDF), до 255 символов, без пути.
+  string filename = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 255
+  }];
+  // UUID операции для безопасного повтора.
+  string request_id = 3 [(buf.validate.field).string.uuid = true];
+}
+// CreateMaterialAttachmentResponse содержит ссылку загрузки и предел размера.
+message CreateMaterialAttachmentResponse {
+  // Метаданные вложения.
+  MaterialAttachment attachment = 1;
+  // Ссылка для PUT; пусто, если вложение уже подтверждено.
+  string upload_url = 2;
+  // Срок PUT-ссылки; отсутствует без ссылки.
+  google.protobuf.Timestamp upload_expire_time = 3;
+  // Максимальный размер в байтах, проверяется при confirm.
+  int64 max_size_bytes = 4;
+}
+// ConfirmMaterialAttachmentRequest завершает загрузку.
+message ConfirmMaterialAttachmentRequest {
+  // UUID материала.
+  string material_id = 1 [(buf.validate.field).string.uuid = true];
+  // UUID вложения.
+  string id = 2 [(buf.validate.field).string.uuid = true];
+}
+// ConfirmMaterialAttachmentResponse содержит подтверждённые метаданные без ссылки.
+message ConfirmMaterialAttachmentResponse {
+  // Вложение.
+  MaterialAttachment attachment = 1;
+}
+// DeleteMaterialAttachmentRequest удаляет вложение.
+message DeleteMaterialAttachmentRequest {
+  // UUID материала.
+  string material_id = 1 [(buf.validate.field).string.uuid = true];
+  // UUID вложения.
+  string id = 2 [(buf.validate.field).string.uuid = true];
+}
+// DeleteMaterialAttachmentResponse подтверждает удаление.
+message DeleteMaterialAttachmentResponse {}

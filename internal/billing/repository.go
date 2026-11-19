@@ -27,6 +27,7 @@ type Plan struct {
 	CompilationLimit         int32
 	CompilationWindowSeconds int32
 	MonthlyTestRunLimit      int32
+	HasMaterialAccess        bool
 }
 
 // Payment хранит снимок условий покупки и устойчивый ключ повторов API провайдера.
@@ -55,11 +56,11 @@ type Repository struct {
 // NewRepository создаёт хранилище биллинга.
 func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
 
-const planColumns = `code,name,amount_kopecks,period_days,compilation_limit,compilation_window_seconds,monthly_test_run_limit`
+const planColumns = `code,name,amount_kopecks,period_days,compilation_limit,compilation_window_seconds,monthly_test_run_limit,has_material_access`
 
 func scanPlan(row pgx.Row) (Plan, error) {
 	var plan Plan
-	err := row.Scan(&plan.Code, &plan.Name, &plan.AmountKopecks, &plan.PeriodDays, &plan.CompilationLimit, &plan.CompilationWindowSeconds, &plan.MonthlyTestRunLimit)
+	err := row.Scan(&plan.Code, &plan.Name, &plan.AmountKopecks, &plan.PeriodDays, &plan.CompilationLimit, &plan.CompilationWindowSeconds, &plan.MonthlyTestRunLimit, &plan.HasMaterialAccess)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Plan{}, ErrNotFound
 	}

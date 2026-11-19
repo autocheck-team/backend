@@ -265,7 +265,7 @@ func (s *Service) ListMyPayments(ctx context.Context, req *v1.ListMyPaymentsRequ
 }
 
 func planProto(plan Plan) *v1.Plan {
-	return &v1.Plan{Code: plan.Code, Name: plan.Name, AmountKopecks: plan.AmountKopecks, PeriodDays: plan.PeriodDays, CompilationLimit: plan.CompilationLimit, CompilationWindowSeconds: plan.CompilationWindowSeconds, MonthlyTestRunLimit: plan.MonthlyTestRunLimit}
+	return &v1.Plan{Code: plan.Code, Name: plan.Name, AmountKopecks: plan.AmountKopecks, PeriodDays: plan.PeriodDays, CompilationLimit: plan.CompilationLimit, CompilationWindowSeconds: plan.CompilationWindowSeconds, MonthlyTestRunLimit: plan.MonthlyTestRunLimit, HasMaterialAccess: plan.HasMaterialAccess}
 }
 
 func paymentProto(payment Payment) *v1.Payment {

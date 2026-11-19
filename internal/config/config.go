@@ -12,14 +12,17 @@ import (
 
 // Config — настройки api, worker и migrate.
 type Config struct {
-	MetricsAddr          string
-	MetricsPollInterval  time.Duration
-	MetricsQueryTimeout  time.Duration
-	HTTPAddr             string
-	GRPCAddr             string
-	DatabaseURL          string
-	ShutdownTimeout      time.Duration
-	FeedbackQueryTimeout time.Duration
+	MetricsAddr                string
+	MetricsPollInterval        time.Duration
+	MetricsQueryTimeout        time.Duration
+	HTTPAddr                   string
+	GRPCAddr                   string
+	DatabaseURL                string
+	ShutdownTimeout            time.Duration
+	FeedbackQueryTimeout       time.Duration
+	MaterialQueryTimeout       time.Duration
+	MaterialObjectTimeout      time.Duration
+	MaterialMaxAttachmentBytes int64
 
 	S3Endpoint string
 	// S3PublicEndpoint — адрес хранилища для браузера (presigned-ссылки).
@@ -90,6 +93,21 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("invalid feedback query timeout: %w", err))
 	} else if c.FeedbackQueryTimeout <= 0 {
 		errs = append(errs, errors.New("feedback query timeout must be positive"))
+	}
+	if c.MaterialQueryTimeout, err = time.ParseDuration(getenv("MATERIAL_QUERY_TIMEOUT", "5s")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid material query timeout: %w", err))
+	} else if c.MaterialQueryTimeout <= 0 {
+		errs = append(errs, errors.New("material query timeout must be positive"))
+	}
+	if c.MaterialObjectTimeout, err = time.ParseDuration(getenv("MATERIAL_OBJECT_TIMEOUT", "30s")); err != nil {
+		errs = append(errs, fmt.Errorf("invalid material object timeout: %w", err))
+	} else if c.MaterialObjectTimeout <= 0 {
+		errs = append(errs, errors.New("material object timeout must be positive"))
+	}
+	if c.MaterialMaxAttachmentBytes, err = strconv.ParseInt(getenv("MATERIAL_MAX_ATTACHMENT_BYTES", "10485760"), 10, 64); err != nil {
+		errs = append(errs, fmt.Errorf("invalid material attachment limit: %w", err))
+	} else if c.MaterialMaxAttachmentBytes <= 0 || c.MaterialMaxAttachmentBytes > 64<<20 {
+		errs = append(errs, errors.New("material attachment limit must be between 1 and 67108864 bytes"))
 	}
 	if c.WorkerConcurrency, err = strconv.Atoi(getenv("WORKER_CONCURRENCY", "2")); err != nil {
 		errs = append(errs, fmt.Errorf("WORKER_CONCURRENCY: %w", err))
