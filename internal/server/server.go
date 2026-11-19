@@ -43,6 +43,7 @@ type Services struct {
 	Feedback       v1.FeedbackServiceServer
 	Billing        v1.BillingServiceServer
 	TestGeneration v1.TestGenerationServiceServer
+	Recommendation v1.RecommendationServiceServer
 }
 
 // Server — gRPC-сервер и HTTP-шлюз.
@@ -88,6 +89,9 @@ func New(
 	if svc.TestGeneration != nil {
 		v1.RegisterTestGenerationServiceServer(g, svc.TestGeneration)
 	}
+	if svc.Recommendation != nil {
+		v1.RegisterRecommendationServiceServer(g, svc.Recommendation)
+	}
 	hs := health.NewServer()
 	healthpb.RegisterHealthServer(g, hs)
 	reflection.Register(g)
@@ -130,6 +134,7 @@ func (s *Server) Run(ctx context.Context) error {
 		v1.RegisterFeedbackServiceHandler,
 		v1.RegisterBillingServiceHandler,
 		v1.RegisterTestGenerationServiceHandler,
+		v1.RegisterRecommendationServiceHandler,
 	} {
 		if err := register(ctx, gw, conn); err != nil {
 			return fmt.Errorf("register gateway: %w", err)

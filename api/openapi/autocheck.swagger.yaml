@@ -12,6 +12,8 @@ tags:
     description: FeedbackService — запросы пользователей об изменениях платформы.
   - name: ProblemService
     description: ProblemService — задания, тест-кейсы и языки программирования.
+  - name: RecommendationService
+    description: RecommendationService подбирает опубликованные задания всем вошедшим пользователям бесплатно.
   - name: SubmissionService
     description: 'SubmissionService — посылки: отправка решений и их результаты.'
   - name: TestGenerationService
@@ -716,6 +718,28 @@ paths:
             $ref: '#/definitions/TestGenerationServiceAcceptTestGenerationBody'
       tags:
         - TestGenerationService
+  /v1/problems:recommend:
+    post:
+      summary: RecommendProblems возвращает до десяти заданий; дневная квота общая для всех тарифов.
+      operationId: RecommendationService_RecommendProblems
+      responses:
+        "200":
+          description: A successful response.
+          schema:
+            $ref: '#/definitions/v1RecommendProblemsResponse'
+        default:
+          description: An unexpected error response.
+          schema:
+            $ref: '#/definitions/rpcStatus'
+      parameters:
+        - name: body
+          description: RecommendProblemsRequest содержит учебную цель, а не инструкции для модели.
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1RecommendProblemsRequest'
+      tags:
+        - RecommendationService
   /v1/submissions:
     get:
       summary: |-
@@ -1523,6 +1547,53 @@ definitions:
         description: Время последнего изменения.
         readOnly: true
     description: Problem — задание.
+  v1ProblemRecommendation:
+    type: object
+    properties:
+      problemId:
+        type: string
+        description: UUID задания из каталога.
+      score:
+        type: number
+        format: double
+        description: Косинусная близость [-1, 1]; при текстовом поиске — нормализованный ранг [0, 1].
+    description: ProblemRecommendation содержит только идентификатор существующего опубликованного задания.
+  v1RecommendProblemsRequest:
+    type: object
+    properties:
+      goal:
+        type: string
+        description: Чему пользователь хочет научиться; 1–1000 символов, не только пробелы.
+      languageId:
+        type: string
+        description: Разрешённый активный язык задания; пустое значение отключает фильтр.
+      difficulty:
+        type: string
+        description: Пожелание к сложности до 100 символов; семантическая подсказка, не строгий фильтр.
+      limit:
+        type: integer
+        format: int32
+        description: 'Число результатов: 0 означает 5, максимум 10. Продолжения списка нет.'
+    description: RecommendProblemsRequest содержит учебную цель, а не инструкции для модели.
+  v1RecommendProblemsResponse:
+    type: object
+    properties:
+      recommendations:
+        type: array
+        items:
+          type: object
+          $ref: '#/definitions/v1ProblemRecommendation'
+        description: Задания по убыванию оценки; при равенстве — по UUID. Список может быть пустым.
+      explanation:
+        type: string
+        description: Одно общее объяснение до 500 символов; пустое при недоступной LLM или отсутствии результатов.
+      isTextFallback:
+        type: boolean
+        description: Истина, если применён текстовый поиск вместо эмбеддингов.
+      fallbackMessage:
+        type: string
+        description: Безопасное пояснение деградации для пользователя; иначе пустое.
+    description: RecommendProblemsResponse явно сообщает о деградации до текстового поиска.
   v1ReportText:
     type: object
     properties:

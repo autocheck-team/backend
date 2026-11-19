@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package autocheck.v1;
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+
+// RecommendationService подбирает опубликованные задания всем вошедшим пользователям бесплатно.
+service RecommendationService {
+  // RecommendProblems возвращает до десяти заданий; дневная квота общая для всех тарифов.
+  rpc RecommendProblems(RecommendProblemsRequest) returns (RecommendProblemsResponse) {
+    option (google.api.http) = {
+      post: "/v1/problems:recommend"
+      body: "*"
+    };
+  }
+}
+
+// RecommendProblemsRequest содержит учебную цель, а не инструкции для модели.
+message RecommendProblemsRequest {
+  // Чему пользователь хочет научиться; 1–1000 символов, не только пробелы.
+  string goal = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+  // Разрешённый активный язык задания; пустое значение отключает фильтр.
+  string language_id = 2 [(buf.validate.field).string.max_len = 100];
+  // Пожелание к сложности до 100 символов; семантическая подсказка, не строгий фильтр.
+  string difficulty = 3 [(buf.validate.field).string.max_len = 100];
+  // Число результатов: 0 означает 5, максимум 10. Продолжения списка нет.
+  int32 limit = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 10
+  }];
+}
+
+// ProblemRecommendation содержит только идентификатор существующего опубликованного задания.
+message ProblemRecommendation {
+  // UUID задания из каталога.
+  string problem_id = 1;
+  // Косинусная близость [-1, 1]; при текстовом поиске — нормализованный ранг [0, 1].
+  double score = 2;
+}
+
+// RecommendProblemsResponse явно сообщает о деградации до текстового поиска.
+message RecommendProblemsResponse {
+  // Задания по убыванию оценки; при равенстве — по UUID. Список может быть пустым.
+  repeated ProblemRecommendation recommendations = 1;
+  // Одно общее объяснение до 500 символов; пустое при недоступной LLM или отсутствии результатов.
+  string explanation = 2;
+  // Истина, если применён текстовый поиск вместо эмбеддингов.
+  bool is_text_fallback = 3;
+  // Безопасное пояснение деградации для пользователя; иначе пустое.
+  string fallback_message = 4;
+}

@@ -54,7 +54,7 @@ func New(cfg Config) (*Client, error) {
 		cfg.Model = "nvidia/nemotron-3.5-super-vl:free"
 	}
 	if cfg.EmbeddingModel == "" {
-		cfg.EmbeddingModel = "nvidia/nemotron-3.5-embed-1b:free"
+		cfg.EmbeddingModel = "nvidia/nemotron-3-embed-1b:free"
 	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = 2 * time.Minute

@@ -17,7 +17,9 @@ import (
 	"github.com/autocheck-team/backend/internal/config"
 	"github.com/autocheck-team/backend/internal/db"
 	"github.com/autocheck-team/backend/internal/feedback"
+	"github.com/autocheck-team/backend/internal/llm"
 	"github.com/autocheck-team/backend/internal/problem"
+	"github.com/autocheck-team/backend/internal/recommendation"
 	"github.com/autocheck-team/backend/internal/server"
 	"github.com/autocheck-team/backend/internal/storage"
 	"github.com/autocheck-team/backend/internal/submission"
@@ -89,6 +91,12 @@ func run(log *slog.Logger) error {
 		paymentProvider = provider
 	}
 	billingService := billing.NewService(billing.NewRepository(pool), paymentProvider, log)
+	model, err := llm.New(cfg.LLM)
+	if err != nil {
+		return err
+	}
+	recommendations := recommendation.New(
+		recommendation.NewRepository(pool, cfg.RecommendationQueryTimeout), model, validator, cfg.Recommendation)
 	srv := server.New(server.Config{
 		GRPCAddr:           cfg.GRPCAddr,
 		HTTPAddr:           cfg.HTTPAddr,
@@ -101,9 +109,14 @@ func run(log *slog.Logger) error {
 		Problem:        problem.NewService(problem.NewRepository(pool), objects, validator),
 		Submission:     submission.NewService(submission.NewRepository(pool), objects, events),
 		Feedback:       feedback.NewService(feedback.NewRepository(pool, cfg.FeedbackQueryTimeout), validator),
+		Recommendation: recommendations,
 	})
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error { return srv.Run(ctx) })
 	group.Go(func() error { return billingService.RunSync(ctx, cfg.BillingSyncInterval) })
+	group.Go(func() error {
+		recommendations.Run(ctx, func(err error) { log.ErrorContext(ctx, "problem embedding refresh failed", "err", err) })
+		return nil
+	})
 	return group.Wait()
 }

@@ -66,7 +66,7 @@ func TestLLMConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.LLM.Model != "nvidia/nemotron-3.5-super-vl:free" || cfg.LLM.EmbeddingModel != "nvidia/nemotron-3.5-embed-1b:free" || cfg.LLM.MaxTokens != 8192 || cfg.LLM.Retries != 2 || cfg.LLM.Timeout != 2*time.Minute {
+	if cfg.LLM.Model != "nvidia/nemotron-3.5-super-vl:free" || cfg.LLM.EmbeddingModel != "nvidia/nemotron-3-embed-1b:free" || cfg.LLM.MaxTokens != 8192 || cfg.LLM.Retries != 2 || cfg.LLM.Timeout != 2*time.Minute {
 		t.Fatal("unexpected LLM defaults")
 	}
 	for _, tc := range []struct{ name, key, value string }{
