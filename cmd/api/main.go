@@ -98,14 +98,14 @@ func run(log *slog.Logger) error {
 	billingRepository := billing.NewRepository(pool)
 	billingRepository.Metrics = metrics
 	billingService := billing.NewService(billingRepository, paymentProvider, log)
-	submissionService := submission.NewService(submission.NewRepository(pool), objects, events)
-	submissionService.Metrics = metrics
 	model, err := llm.New(cfg.LLM)
 	if err != nil {
 		return err
 	}
 	recommendations := recommendation.New(
 		recommendation.NewRepository(pool, cfg.RecommendationQueryTimeout), model, validator, cfg.Recommendation)
+	submissionService := submission.NewWithHints(submission.NewRepository(pool), objects, events, submission.NewHintRepository(pool, cfg.HintQueryTimeout), model, cfg.HintTimeout)
+	submissionService.Metrics = metrics
 	srv := server.New(server.Config{
 		GRPCAddr:           cfg.GRPCAddr,
 		Metrics:            metrics,

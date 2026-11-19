@@ -19,12 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SubmissionService_CreateSubmission_FullMethodName    = "/autocheck.v1.SubmissionService/CreateSubmission"
-	SubmissionService_GetSubmission_FullMethodName       = "/autocheck.v1.SubmissionService/GetSubmission"
-	SubmissionService_WatchSubmission_FullMethodName     = "/autocheck.v1.SubmissionService/WatchSubmission"
-	SubmissionService_GetSubmissionReport_FullMethodName = "/autocheck.v1.SubmissionService/GetSubmissionReport"
-	SubmissionService_ListSubmissions_FullMethodName     = "/autocheck.v1.SubmissionService/ListSubmissions"
-	SubmissionService_GetSubmissionSource_FullMethodName = "/autocheck.v1.SubmissionService/GetSubmissionSource"
+	SubmissionService_CreateSubmission_FullMethodName     = "/autocheck.v1.SubmissionService/CreateSubmission"
+	SubmissionService_GetSubmission_FullMethodName        = "/autocheck.v1.SubmissionService/GetSubmission"
+	SubmissionService_WatchSubmission_FullMethodName      = "/autocheck.v1.SubmissionService/WatchSubmission"
+	SubmissionService_GetSubmissionReport_FullMethodName  = "/autocheck.v1.SubmissionService/GetSubmissionReport"
+	SubmissionService_CreateSubmissionHint_FullMethodName = "/autocheck.v1.SubmissionService/CreateSubmissionHint"
+	SubmissionService_ListSubmissionHints_FullMethodName  = "/autocheck.v1.SubmissionService/ListSubmissionHints"
+	SubmissionService_ListSubmissions_FullMethodName      = "/autocheck.v1.SubmissionService/ListSubmissions"
+	SubmissionService_GetSubmissionSource_FullMethodName  = "/autocheck.v1.SubmissionService/GetSubmissionSource"
 )
 
 // SubmissionServiceClient is the client API for SubmissionService service.
@@ -46,6 +48,11 @@ type SubmissionServiceClient interface {
 	// GetSubmissionReport возвращает отчёт; данные закрытых тестов не раскрываются.
 	// Права совпадают с GetSubmission.
 	GetSubmissionReport(ctx context.Context, in *GetSubmissionReportRequest, opts ...grpc.CallOption) (*GetSubmissionReportResponse, error)
+	// CreateSubmissionHint даёт одну подсказку к собственной завершённой посылке.
+	// Новая подсказка требует Pro и разрешения автора; повтор возвращает сохранённый ответ.
+	CreateSubmissionHint(ctx context.Context, in *CreateSubmissionHintRequest, opts ...grpc.CallOption) (*CreateSubmissionHintResponse, error)
+	// ListSubmissionHints возвращает историю с правами GetSubmission, независимо от тарифа.
+	ListSubmissionHints(ctx context.Context, in *ListSubmissionHintsRequest, opts ...grpc.CallOption) (*ListSubmissionHintsResponse, error)
 	// ListSubmissions возвращает посылки, новые первыми. Без problem_id — свои посылки.
 	// С problem_id автор задания и администратор видят посылки всех пользователей.
 	ListSubmissions(ctx context.Context, in *ListSubmissionsRequest, opts ...grpc.CallOption) (*ListSubmissionsResponse, error)
@@ -110,6 +117,26 @@ func (c *submissionServiceClient) GetSubmissionReport(ctx context.Context, in *G
 	return out, nil
 }
 
+func (c *submissionServiceClient) CreateSubmissionHint(ctx context.Context, in *CreateSubmissionHintRequest, opts ...grpc.CallOption) (*CreateSubmissionHintResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateSubmissionHintResponse)
+	err := c.cc.Invoke(ctx, SubmissionService_CreateSubmissionHint_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *submissionServiceClient) ListSubmissionHints(ctx context.Context, in *ListSubmissionHintsRequest, opts ...grpc.CallOption) (*ListSubmissionHintsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSubmissionHintsResponse)
+	err := c.cc.Invoke(ctx, SubmissionService_ListSubmissionHints_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *submissionServiceClient) ListSubmissions(ctx context.Context, in *ListSubmissionsRequest, opts ...grpc.CallOption) (*ListSubmissionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListSubmissionsResponse)
@@ -149,6 +176,11 @@ type SubmissionServiceServer interface {
 	// GetSubmissionReport возвращает отчёт; данные закрытых тестов не раскрываются.
 	// Права совпадают с GetSubmission.
 	GetSubmissionReport(context.Context, *GetSubmissionReportRequest) (*GetSubmissionReportResponse, error)
+	// CreateSubmissionHint даёт одну подсказку к собственной завершённой посылке.
+	// Новая подсказка требует Pro и разрешения автора; повтор возвращает сохранённый ответ.
+	CreateSubmissionHint(context.Context, *CreateSubmissionHintRequest) (*CreateSubmissionHintResponse, error)
+	// ListSubmissionHints возвращает историю с правами GetSubmission, независимо от тарифа.
+	ListSubmissionHints(context.Context, *ListSubmissionHintsRequest) (*ListSubmissionHintsResponse, error)
 	// ListSubmissions возвращает посылки, новые первыми. Без problem_id — свои посылки.
 	// С problem_id автор задания и администратор видят посылки всех пользователей.
 	ListSubmissions(context.Context, *ListSubmissionsRequest) (*ListSubmissionsResponse, error)
@@ -175,6 +207,12 @@ func (UnimplementedSubmissionServiceServer) WatchSubmission(*WatchSubmissionRequ
 }
 func (UnimplementedSubmissionServiceServer) GetSubmissionReport(context.Context, *GetSubmissionReportRequest) (*GetSubmissionReportResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSubmissionReport not implemented")
+}
+func (UnimplementedSubmissionServiceServer) CreateSubmissionHint(context.Context, *CreateSubmissionHintRequest) (*CreateSubmissionHintResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateSubmissionHint not implemented")
+}
+func (UnimplementedSubmissionServiceServer) ListSubmissionHints(context.Context, *ListSubmissionHintsRequest) (*ListSubmissionHintsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSubmissionHints not implemented")
 }
 func (UnimplementedSubmissionServiceServer) ListSubmissions(context.Context, *ListSubmissionsRequest) (*ListSubmissionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSubmissions not implemented")
@@ -268,6 +306,42 @@ func _SubmissionService_GetSubmissionReport_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SubmissionService_CreateSubmissionHint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateSubmissionHintRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubmissionServiceServer).CreateSubmissionHint(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubmissionService_CreateSubmissionHint_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubmissionServiceServer).CreateSubmissionHint(ctx, req.(*CreateSubmissionHintRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SubmissionService_ListSubmissionHints_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSubmissionHintsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubmissionServiceServer).ListSubmissionHints(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubmissionService_ListSubmissionHints_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubmissionServiceServer).ListSubmissionHints(ctx, req.(*ListSubmissionHintsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SubmissionService_ListSubmissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListSubmissionsRequest)
 	if err := dec(in); err != nil {
@@ -322,6 +396,14 @@ var SubmissionService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSubmissionReport",
 			Handler:    _SubmissionService_GetSubmissionReport_Handler,
+		},
+		{
+			MethodName: "CreateSubmissionHint",
+			Handler:    _SubmissionService_CreateSubmissionHint_Handler,
+		},
+		{
+			MethodName: "ListSubmissionHints",
+			Handler:    _SubmissionService_ListSubmissionHints_Handler,
 		},
 		{
 			MethodName: "ListSubmissions",

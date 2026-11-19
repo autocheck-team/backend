@@ -18,7 +18,7 @@ const databaseTimeout = 5 * time.Second
 // ErrNotFound означает отсутствие тарифа или платежа.
 var ErrNotFound = errors.New("billing record not found")
 
-// Plan хранит изменяемые данные тарифа, нулевые лимиты означают отсутствие ограничений.
+// Plan хранит условия тарифа; ноль дневного лимита ИИ запрещает функцию.
 type Plan struct {
 	Code                     string
 	Name                     string
@@ -29,6 +29,7 @@ type Plan struct {
 	MonthlyTestRunLimit      int32
 	HasMaterialAccess        bool
 	DailyTestGenerationLimit int32
+	DailyAIHintLimit         int32
 }
 
 // Payment хранит снимок условий покупки и устойчивый ключ повторов API провайдера.
@@ -57,11 +58,11 @@ type Repository struct {
 // NewRepository создаёт хранилище биллинга.
 func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
 
-const planColumns = `code,name,amount_kopecks,period_days,compilation_limit,compilation_window_seconds,monthly_test_run_limit,has_material_access,daily_test_generation_limit`
+const planColumns = `code,name,amount_kopecks,period_days,compilation_limit,compilation_window_seconds,monthly_test_run_limit,has_material_access,daily_test_generation_limit,daily_ai_hint_limit`
 
 func scanPlan(row pgx.Row) (Plan, error) {
 	var plan Plan
-	err := row.Scan(&plan.Code, &plan.Name, &plan.AmountKopecks, &plan.PeriodDays, &plan.CompilationLimit, &plan.CompilationWindowSeconds, &plan.MonthlyTestRunLimit, &plan.HasMaterialAccess, &plan.DailyTestGenerationLimit)
+	err := row.Scan(&plan.Code, &plan.Name, &plan.AmountKopecks, &plan.PeriodDays, &plan.CompilationLimit, &plan.CompilationWindowSeconds, &plan.MonthlyTestRunLimit, &plan.HasMaterialAccess, &plan.DailyTestGenerationLimit, &plan.DailyAIHintLimit)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Plan{}, ErrNotFound
 	}
